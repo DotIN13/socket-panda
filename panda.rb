@@ -1,6 +1,7 @@
 require 'websocket'
 require 'socket'
-require 'securerandom'
+require_relative 'lib/hall'
+require_relative 'lib/wsframe'
 
 # WSServer
 class Server
@@ -19,8 +20,8 @@ class Server
       Thread.start(server.accept) do |socket|
         warn '[INFO] Incomming request'
         if socket.shake
-          hall.checkin(socket)
-          socket.write(socket.make_frame(socket.room))
+          socket.hall = hall
+          socket.write(socket.make_frame("PUT #{socket.room}"))
           socket.hold
         else
           socket.close
@@ -32,7 +33,8 @@ end
 
 # Extend Ruby TCPSocket class
 class TCPSocket
-  attr_accessor :handshake, :http_request, :room, :closed
+  attr_accessor :handshake, :http_request, :room, :closed, :frame
+  attr_reader :hall
 
   def close
     super
@@ -84,6 +86,11 @@ class TCPSocket
     true
   end
 
+  def hall=(hall)
+    @hall = hall
+    hall.checkin(self)
+  end
+
   def make_frame(data)
     WebSocket::Frame::Outgoing::Server.new version: handshake.version, data: data, type: :text
   end
@@ -92,91 +99,24 @@ class TCPSocket
     until closed
       loop do
         # Get frames
-        frame = WSFrame.new(self)
-        warn frame.parse_text
+        @frame = WSFrame.new(self)
+        warn "[INFO] Parsed payload \"#{text = frame.parse_text}\""
+        next if detect_room_change(text)
+
+        broadcast_frame(text)
       end
     end
   end
-end
 
-class WSFrame
-  attr_accessor :socket, :bytes, :payload, :payload_size, :is_masked, :mask
-
-  def initialize(socket)
-    @socket = socket
-    @bytes = []
-    @payload = []
-    parse_info
-    parse_size
-    parse_mask
-    gather_payload
+  def detect_room_change(text)
+    hall.checkin(self, text.split(' ').last) if text.start_with?('PUT')
   end
 
-  def parse_info
-    bytes << socket.getbyte
-    @fin = bytes[0] & 0b10000000
-    @opcode = bytes[0] & 0b00001111
-    raise "We don't support continuations" unless @fin
-    raise 'We only support opcode 1' unless @opcode == 1
-  end
+  def broadcast_frame(text)
+    return unless (peer = (hall[room] - [self]).first)
 
-  def parse_size
-    # Read the next bytes containing mask option and initial payload length
-    bytes << socket.getbyte
-    @is_masked = bytes[1] & 0b10000000
-    warn "[INFO] Payload is #{is_masked ? 'masked' : 'not masked'}"
-    self.payload_size = bytes[1] & 0b01111111
-    # Handle extended payload length
-    handle_extended_length(payload_size) if payload_size > 125
-    warn "[INFO] Received frame of size #{payload_size}"
-  end
-
-  def handle_extended_length(initial_size)
-    raise 'Incorrect payload size' if initial_size > 127
-
-    extend_length = 2 if initial_size == 126
-    extend_length = 8 if initial_size == 127
-    extend_length.times.map { bytes << socket.getbyte }
-    self.payload_size = bytes[2..].join.to_i(10)
-  end
-
-  def parse_mask
-    return unless is_masked
-
-    # Do not include mask in bytes
-    @mask = 4.times.map { socket.getbyte }
-    warn "[INFO] Parsed mask #{mask}"
-  end
-
-  def gather_payload
-    payload_size.times { payload << socket.getbyte }
-    warn "[INFO] Received raw payload #{payload}"
-  end
-
-  def parse_text
-    if is_masked
-      payload.each_with_index { |byte, i| payload[i] = byte ^ mask[i % 4] }
-      warn "[INFO] Unmasked payload #{payload}"
-    end
-    payload.pack('C*').force_encoding('utf-8').inspect
-  end
-end
-
-# Talkroom
-class Hall < Hash
-  def checkin(guest, room = nil)
-    room ||= new_room
-    self[room] ||= []
-    self[room] << guest
-    guest.room = room
-    warn "[INFO] Guest joined room ##{room} with #{self[room]}"
-  end
-
-  def new_room
-    number = SecureRandom.alphanumeric.to_sym
-    return number unless self[number]
-
-    new_room
+    peer.write make_frame(text)
+    warn "[INFO] Broadcasted payload to #{peer}"
   end
 end
 
