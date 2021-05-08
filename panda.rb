@@ -96,15 +96,23 @@ class TCPSocket
   end
 
   def hold
-    until closed
-      loop do
-        # Get frames
-        @frame = WSFrame.new(self)
-        warn "[INFO] Parsed payload \"#{text = frame.parse_text}\""
-        next if detect_room_change(text)
+    recvframe
+    # Close socket
+    warn '[WARN] Responding with closing frame, closing socket'
+    write WebSocket::Frame::Outgoing::Server.new version: handshake.version, type: :close
+    close
+  end
 
-        broadcast_frame(text)
-      end
+  def recvframe
+    until closed
+      # Get frames
+      @frame = WSFrame.new(self)
+      break unless @frame.receive
+
+      warn "[INFO] Parsed payload \"#{text = frame.parse_text}\""
+      next if detect_room_change(text)
+
+      broadcast_frame(text)
     end
   end
 

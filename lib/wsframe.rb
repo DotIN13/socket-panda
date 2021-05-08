@@ -3,11 +3,15 @@ class WSFrame
   attr_accessor :socket, :bytes, :payload, :payload_size, :is_masked, :mask
 
   def initialize(socket)
-    warn '[INFO] Receiving frame'
+    warn '[INFO] Awaiting incoming frame'
     @socket = socket
     @bytes = []
     @payload = []
-    parse_info
+  end
+
+  def receive
+    return false if parse_info == 0x08
+
     parse_size
     parse_mask
     gather_payload
@@ -17,8 +21,12 @@ class WSFrame
     bytes << socket.getbyte
     @fin = bytes[0] & 0b10000000
     @opcode = bytes[0] & 0b00001111
+    warn "[INFO] Reveived frame with opcode #{@opcode} and fin #{@fin}"
+    warn '[WARN] Received closing frame' if @opcode == 0x08
     raise "We don't support continuations" unless @fin
-    raise 'We only support opcode 1' unless @opcode == 1
+    raise 'Opcode unsupported' unless [0x01, 0x08].include? @opcode
+
+    @opcode
   end
 
   def parse_size
@@ -52,6 +60,7 @@ class WSFrame
   def gather_payload
     payload_size.times { payload << socket.getbyte }
     warn "[INFO] Received raw payload #{payload}"
+    payload.length
   end
 
   def parse_text
