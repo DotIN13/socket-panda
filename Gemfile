@@ -10,5 +10,4 @@ group :development do
   gem 'rubocop'
 end
 
-gem 'openssl', '~> 2.2'
 gem 'websocket', '~> 1.2'

@@ -2,7 +2,6 @@ GEM
   remote: https://rubygems.org/
   specs:
     ast (2.4.2)
-    openssl (2.2.0)
     parallel (1.20.1)
     parser (3.0.0.0)
       ast (~> 2.4.1)
@@ -28,7 +27,6 @@ PLATFORMS
   arm64-darwin-20
 
 DEPENDENCIES
-  openssl (~> 2.2)
   rubocop
   websocket (~> 1.2)
 
