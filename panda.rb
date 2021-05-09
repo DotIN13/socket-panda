@@ -38,37 +38,8 @@ class TCPSocket
   def close
     super
     @opened = false
-    hall[room] -= [self] if room
+    checkout
     warn '[WARN] Socket closed'
-  end
-
-  def parse_http_request
-    self.http_request = ''
-    # Always get line before breaking from loop
-    # For HTTP request must end with "\r\n"
-    loop do
-      line = read_line
-      return false unless line
-
-      self.http_request += line
-      break if line == "\r\n"
-    end
-    raise HandshakeError, 'Invalid websocket request' unless http_request.downcase.include? 'upgrade: websocket'
-
-    warn '[INFO] Received HTTP request: ', http_request
-  end
-
-  def read_line
-    ready = IO.select [self], nil, nil, 3
-    raise HandshakeError, 'HTTP request timeout' unless ready
-
-    ready.first.first.gets
-  end
-
-  def create_handshake
-    self.handshake = WebSocket::Handshake::Server.new(secure: true)
-    handshake << http_request
-    handshake.valid?
   end
 
   def shake
@@ -101,6 +72,44 @@ class TCPSocket
     close
   end
 
+  # Talkroom methods
+  def checkout
+    hall[room]&.checkout(self)
+    warn "[WARN] Guest left room ##{room}"
+    self.room = nil
+  end
+
+  private
+
+  def parse_http_request
+    self.http_request = ''
+    # Always get line before breaking from loop
+    # For HTTP request must end with "\r\n"
+    loop do
+      line = read_line
+      return false unless line
+
+      self.http_request += line
+      break if line == "\r\n"
+    end
+    raise HandshakeError, 'Invalid websocket request' unless http_request.downcase.include? 'upgrade: websocket'
+
+    warn '[INFO] Received HTTP request: ', http_request
+  end
+
+  def read_line
+    ready = IO.select [self], nil, nil, 3
+    raise HandshakeError, 'HTTP request timeout' unless ready
+
+    ready.first.first.gets
+  end
+
+  def create_handshake
+    self.handshake = WebSocket::Handshake::Server.new(secure: true)
+    handshake << http_request
+    handshake.valid?
+  end
+
   def recvframe
     while opened
       # Get frames
@@ -126,11 +135,6 @@ class TCPSocket
 
     roommate.write make_frame(@text)
     warn "[INFO] Broadcasted payload to #{roommate}"
-  end
-
-  # Talkroom methods
-  def checkout
-    hall[room].checkout(self) if room
   end
 
   def roommate
