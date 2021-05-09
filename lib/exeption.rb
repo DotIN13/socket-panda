@@ -11,3 +11,9 @@ end
 
 class HandshakeError < PandaSocketError
 end
+
+class TalkRoomError < PandaSocketError
+end
+
+class RoomFullError < TalkRoomError
+end

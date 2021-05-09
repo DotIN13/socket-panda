@@ -122,10 +122,19 @@ class TCPSocket
   end
 
   def broadcast_frame
-    return unless (peer = (hall[room] - [self]).first)
+    return unless roommate
 
-    peer.write make_frame(@text)
-    warn "[INFO] Broadcasted payload to #{peer}"
+    roommate.write make_frame(@text)
+    warn "[INFO] Broadcasted payload to #{roommate}"
+  end
+
+  # Talkroom methods
+  def checkout
+    hall[room].checkout(self) if room
+  end
+
+  def roommate
+    (hall[room].guests - [self]).first
   end
 end
 

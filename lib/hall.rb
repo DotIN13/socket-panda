@@ -1,17 +1,24 @@
 require 'securerandom'
+require_relative 'exeption'
 
 # Talkroom
 class Hall < Hash
   # room should be symbol
   def checkin(guest, room = nil)
-    self[guest.room]&.delete(guest)
-    room = room&.to_sym
-    room ||= new_room
-    self[room] ||= []
-    self[room] << guest
+    guest.checkout
+    room = room ? room.to_sym : new_room
+    self[room] ||= Room.new(room)
+    begin
+      raise NoRoomError, "No room available with id ##{room}" unless self[room]
+
+      self[room] << guest
+    rescue TalkRoomError
+      room = new_room
+      self[room] = Room.new(room)
+      retry
+    end
     guest.room = room
-    warn "[INFO] Guest joined room ##{room} with #{self[room]}"
-    true
+    warn "[INFO] Guest joined room ##{room} with #{self[room].guests}"
   end
 
   def new_room
@@ -19,5 +26,27 @@ class Hall < Hash
     return number unless self[number]
 
     new_room
+  end
+end
+
+# Serve as components for the hall
+# Can only be occupied by two
+class Room
+  attr_accessor :guests, :id
+
+  def initialize(id, host = nil)
+    @id = id
+    @guests = []
+    self << host if host
+  end
+
+  def <<(guest)
+    raise RoomFullError, "Talkroom ##{id} is full" if guests.length > 1
+
+    guests << guest
+  end
+
+  def checkout(guest)
+    guests.delete guest
   end
 end
