@@ -2,10 +2,11 @@ require 'websocket'
 require 'socket'
 require_relative 'lib/hall'
 require_relative 'lib/wsframe'
+require_relative 'lib/exeption'
 
 # WSServer
 class Server
-  attr_reader :server, :ssl_server, :hall
+  attr_reader :server, :hall
 
   def initialize
     @server = TCPServer.new 5613
@@ -23,8 +24,6 @@ class Server
           socket.hall = hall
           socket.write(socket.make_frame("PUT #{socket.room}"))
           socket.hold
-        else
-          socket.close
         end
       end
     end
@@ -33,12 +32,13 @@ end
 
 # Extend Ruby TCPSocket class
 class TCPSocket
-  attr_accessor :handshake, :http_request, :room, :closed, :frame
+  attr_accessor :handshake, :http_request, :room, :opened, :frame
   attr_reader :hall
 
   def close
     super
-    @closed = true
+    @opened = false
+    hall[room] -= [self] if room
     warn '[WARN] Socket closed'
   end
 
@@ -53,37 +53,35 @@ class TCPSocket
       self.http_request += line
       break if line == "\r\n"
     end
-    warn '[INFO] Received http request: ', http_request
-    true
+    raise HandshakeError, 'Invalid websocket request' unless http_request.downcase.include? 'upgrade: websocket'
+
+    warn '[INFO] Received HTTP request: ', http_request
   end
 
   def read_line
     ready = IO.select [self], nil, nil, 3
-    unless ready
-      warn '[ERROR] Socket timeout'
-      return false
-    end
+    raise HandshakeError, 'HTTP request timeout' unless ready
+
     ready.first.first.gets
   end
 
   def create_handshake
     self.handshake = WebSocket::Handshake::Server.new(secure: true)
     handshake << http_request
+    handshake.valid?
   end
 
   def shake
-    return false unless parse_http_request
-
-    create_handshake
-    if handshake.valid?
-      warn "[INFO] Handshake valid, responding with #{handshake}"
-      puts handshake.to_s
-    else
-      warn '[ERROR] Handshake invalid, closing socket'
-      return false
+    begin
+      parse_http_request
+      raise HandshakeError, 'Handshake invalid, closing socket' unless create_handshake
+    rescue HandshakeError
+      return close
     end
-    @closed = false
-    true
+
+    warn "[INFO] Handshake valid, responding with #{handshake}"
+    puts handshake.to_s
+    @opened = true
   end
 
   def hall=(hall)
@@ -104,26 +102,29 @@ class TCPSocket
   end
 
   def recvframe
-    until closed
+    while opened
       # Get frames
       @frame = WSFrame.new(self)
-      break unless @frame.receive
+      begin
+        break unless @frame.receive
+      rescue FrameError
+        break
+      end
+      warn "[INFO] Parsed payload \"#{@text = frame.parse_text}\""
+      next if detect_room_change
 
-      warn "[INFO] Parsed payload \"#{text = frame.parse_text}\""
-      next if detect_room_change(text)
-
-      broadcast_frame(text)
+      broadcast_frame
     end
   end
 
-  def detect_room_change(text)
-    hall.checkin(self, text.split(' ').last) if text.start_with?('PUT')
+  def detect_room_change
+    hall.checkin(self, @text.split(' ').last) if @text.start_with?('PUT')
   end
 
-  def broadcast_frame(text)
+  def broadcast_frame
     return unless (peer = (hall[room] - [self]).first)
 
-    peer.write make_frame(text)
+    peer.write make_frame(@text)
     warn "[INFO] Broadcasted payload to #{peer}"
   end
 end

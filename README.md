@@ -1,4 +1,5 @@
 # WIP
 
-+ Avoid DDoS Attacks
-+ Acknowledge close frames
+[ ] Avoid DDoS Attacks
+[*] Acknowledge close frames
+[ ] Detect room full

@@ -19,12 +19,12 @@ class WSFrame
 
   def parse_info
     bytes << socket.getbyte
-    @fin = bytes[0] & 0b10000000
-    @opcode = bytes[0] & 0b00001111
+    @fin = bytes[0][7]
+    @opcode = bytes[0][0..3]
     warn "[INFO] Reveived frame with opcode #{@opcode} and fin #{@fin}"
     warn '[WARN] Received closing frame' if @opcode == 0x08
-    raise "We don't support continuations" unless @fin
-    raise 'Opcode unsupported' unless [0x01, 0x08].include? @opcode
+    raise FrameError, "We don't support continuations" if @fin.zero?
+    raise FrameError, 'Opcode unsupported' unless [0x01, 0x08].include? @opcode
 
     @opcode
   end
