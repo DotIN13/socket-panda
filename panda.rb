@@ -127,7 +127,11 @@ class TCPSocket
   end
 
   def detect_room_change
-    hall.checkin(self, @text.split(' ').last) if @text.start_with?('PUT')
+    return unless @text.start_with?('PUT')
+
+    hall.checkin(self, @text.split(' ').last)
+    # Respond with room change complete message
+    write make_frame(@text)
   end
 
   def broadcast_frame
@@ -137,6 +141,7 @@ class TCPSocket
     warn "[INFO] Broadcasted payload to #{roommate}"
   end
 
+  # Talkroom methods
   def roommate
     (hall[room].guests - [self]).first
   end
