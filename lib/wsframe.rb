@@ -10,7 +10,8 @@ class WSFrame
   end
 
   def receive
-    return false if parse_info == 0x08
+    parse_info
+    return false if @opcode == 0x08
 
     parse_size
     parse_mask
@@ -25,8 +26,6 @@ class WSFrame
     warn '[WARN] Received closing frame' if @opcode == 0x08
     raise FrameError, "We don't support continuations" if @fin.zero?
     raise FrameError, 'Opcode unsupported' unless [0x01, 0x08].include? @opcode
-
-    @opcode
   end
 
   def parse_size
@@ -69,5 +68,9 @@ class WSFrame
       warn "[INFO] Unmasked payload #{payload}"
     end
     payload.pack('C*').force_encoding('utf-8')
+  end
+
+  def is_ping?
+    @opcode == 0x09
   end
 end

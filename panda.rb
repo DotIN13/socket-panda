@@ -11,12 +11,12 @@ class Server
   def initialize
     @server = TCPServer.new 5613
     @hall = Hall.new
-    warn '[INFO] Server is running'
     start
   end
 
   # WIP: Should close socket if not ws connection
   def start
+    warn '[INFO] Server is running'
     loop do
       Thread.start(server.accept) do |socket|
         warn '[INFO] Incomming request'
@@ -66,7 +66,7 @@ class TCPSocket
 
   def hold
     recvframe
-    # Close socket
+    # Close socket if closing frame received or an error occured
     warn '[WARN] Responding with closing frame, closing socket'
     write WebSocket::Frame::Outgoing::Server.new version: handshake.version, type: :close
     close
@@ -120,18 +120,29 @@ class TCPSocket
         break
       end
       warn "[INFO] Parsed payload \"#{@text = frame.parse_text}\""
-      next if detect_room_change
+      pong if frame.is_ping?
+      next if execute_commands
 
       broadcast_frame
     end
   end
 
-  def detect_room_change
-    return unless @text.start_with?('PUT')
+  # Command detection and distribution
+  def execute_commands
+    return change_room if @text.start_with?('PUT')
 
+    false
+  end
+
+  def pong
+    write WebSocket::Frame::Outgoing::Server.new version: handshake.version, data: @text, type: :pong
+  end
+
+  def change_room
     hall.checkin(self, @text.split(' ').last)
     # Respond with room change complete message
     write make_frame(@text)
+    true
   end
 
   def broadcast_frame
