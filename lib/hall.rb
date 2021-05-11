@@ -1,8 +1,13 @@
+# frozen_string_literal: true
+
 require 'securerandom'
 require_relative 'exeption'
+require_relative 'panda_logger'
 
 # Talkroom
 class Hall < Hash
+  include PandaLogger
+
   # room should be symbol
   def checkin(guest, room = nil)
     guest.checkout
@@ -18,7 +23,7 @@ class Hall < Hash
       retry
     end
     guest.room = room
-    warn "[INFO] Guest joined room ##{room} with #{self[room].guests}"
+    logger.info "Guest joined room ##{room} with #{self[room].guests}"
   end
 
   def new_room

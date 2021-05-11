@@ -11,3 +11,5 @@ group :development do
 end
 
 gem 'websocket', '~> 1.2'
+
+gem "memory_profiler", "~> 1.0"

@@ -1,9 +1,14 @@
+# frozen_string_literal: true
+
+require_relative 'panda_logger'
+
 # Parse Websocket frames
 class WSFrame
+  include PandaLogger
   attr_accessor :socket, :bytes, :payload, :payload_size, :is_masked, :mask, :opcode
 
   def initialize(socket)
-    warn '[INFO] Awaiting incoming frame'
+    logger.info 'Awaiting incoming frame'
     @socket = socket
     @bytes = []
   end
@@ -22,8 +27,8 @@ class WSFrame
     @fin = bytes[0][7]
     @opcode = bytes[0][0..3]
     @opcode = socket.opcode if @opcode.zero?
-    warn "[INFO] Reveived frame with opcode #{@opcode} and fin #{@fin}"
-    warn '[WARN] Received closing frame' if @opcode == 0x08
+    logger.info "Reveived frame with opcode #{@opcode} and fin #{@fin}"
+    logger.warn 'Received closing frame' if @opcode == 0x08
     raise FrameError, 'Opcode unsupported' unless [0x01, 0x02, 0x08].include? @opcode
   end
 
@@ -31,12 +36,12 @@ class WSFrame
     # Read the next bytes containing mask option and initial payload length
     bytes << socket.getbyte
     @is_masked = bytes[1] & 0b10000000
-    warn "[INFO] Payload is #{is_masked ? 'masked' : 'not masked'}"
+    logger.info "Payload is #{is_masked ? 'masked' : 'not masked'}"
     self.payload_size = bytes[1] & 0b01111111
-    warn "[INFO] Initial payload size #{payload_size}"
+    logger.info "Initial payload size #{payload_size}"
     # Handle extended payload length
     handle_extended_length(payload_size) if payload_size > 125
-    warn "[INFO] Received frame of size #{payload_size}"
+    logger.info "Received frame of size #{payload_size}"
   end
 
   def handle_extended_length(initial_size)
@@ -51,12 +56,12 @@ class WSFrame
 
     # Do not include mask in bytes
     @mask = 4.times.map { socket.getbyte }
-    warn "[INFO] Parsed mask #{mask}"
+    logger.info "Parsed mask #{mask}"
   end
 
   def gather_payload
     self.payload = socket.read(payload_size).unpack('C*')
-    warn "[INFO] Received raw payload #{payload.first(20)}..."
+    logger.info "Received raw payload #{payload.first(20)}..."
     payload.length
   end
 
@@ -64,14 +69,14 @@ class WSFrame
   def unmask
     return payload unless is_masked && !@unmasked
 
-    payload.each_with_index { |byte, i| payload[i] = byte ^ mask[i % 4] }
-    warn "[INFO] Unmasked payload #{payload.first(20)}..."
+    payload.lazy.each_with_index { |byte, i| payload[i] = byte ^ mask[i % 4] }
+    logger.info "Unmasked payload #{payload.first(20)}..."
     @unmasked = true
     payload
   end
 
-  def parse_text
-    unmask.pack('C*').force_encoding('utf-8')
+  def to_s
+    unmask.pack('C*')
   end
 
   def ping?

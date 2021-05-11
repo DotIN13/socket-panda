@@ -1,11 +1,15 @@
+# frozen_string_literal: true
+
 require 'websocket'
 require 'socket'
 require_relative 'lib/hall'
 require_relative 'lib/wsframe'
 require_relative 'lib/exeption'
+require_relative 'lib/panda_logger'
 
 # WSServer
 class Server
+  include PandaLogger
   attr_reader :server, :hall
 
   def initialize
@@ -16,10 +20,10 @@ class Server
 
   # WIP: Should close socket if not ws connection
   def start
-    warn '[INFO] Server is running'
+    logger.info 'Server is running'
     loop do
       Thread.start(server.accept) do |socket|
-        warn '[INFO] Incomming request'
+        logger.info 'Incomming request'
         if socket.shake
           socket.hall = hall
           socket.write(socket.make_frame("PUT #{socket.room}"))
@@ -32,6 +36,7 @@ end
 
 # Extend Ruby TCPSocket class
 class TCPSocket
+  include PandaLogger
   attr_accessor :handshake, :http_request, :room, :opened, :frame
   attr_reader :hall, :opcode
 
@@ -39,7 +44,7 @@ class TCPSocket
     super
     @opened = false
     checkout
-    warn '[WARN] Socket closed'
+    logger.warn 'Socket closed'
   end
 
   def shake
@@ -50,7 +55,7 @@ class TCPSocket
       return close
     end
 
-    warn "[INFO] Handshake valid, responding with #{handshake}"
+    logger.info "Handshake valid, responding with #{handshake}"
     puts handshake.to_s
     @opened = true
   end
@@ -67,11 +72,11 @@ class TCPSocket
   def hold
     recvframe
     # Close socket if closing frame received or an error occured
-    warn '[WARN] Responding with closing frame, closing socket'
+    logger.warn 'Responding with closing frame, closing socket'
     begin
       write WebSocket::Frame::Outgoing::Server.new version: handshake.version, type: :close
     rescue Errno::EPIPE
-      warn '[WARN] Connection lost, no closing frames sent'
+      logger.warn 'Connection lost, no closing frames sent'
     end
     close
   end
@@ -79,7 +84,7 @@ class TCPSocket
   # Talkroom methods
   def checkout
     hall[room]&.checkout(self)
-    warn "[WARN] Guest left room ##{room}"
+    logger.warn "Guest left room ##{room}"
     self.room = nil
   end
 
@@ -98,7 +103,7 @@ class TCPSocket
     end
     raise HandshakeError, 'Invalid websocket request' unless http_request.downcase.include? 'upgrade: websocket'
 
-    warn '[INFO] Received HTTP request: ', http_request
+    logger.info "Received HTTP request: #{http_request}"
   end
 
   def read_line
@@ -146,20 +151,20 @@ class TCPSocket
     return @opcode = frame.opcode unless frame.fin?
 
     # Process data
-    warn "[INFO] Parsed payload \"#{@data.force_encoding('utf-8')[0..20]}...\"" if frame.text?
+    logger.info "Parsed payload \"#{@data.force_encoding('utf-8')[0..20]}...\"" if frame.text?
     # Do nothing if binary
-    warn '[INFO] Received binary frame as is' if frame.binary?
+    logger.info 'Received binary frame as is' if frame.binary?
   end
 
   def concat_payload
-    @buffer ||= []
-    @buffer += frame.unmask
+    @buffer ||= ''
+    @buffer += frame.to_s
     return unless frame.fin?
 
     # Update @data if finished
-    @data = @buffer.pack('C*')
+    @data = @buffer
     # Release buffer if finished
-    @buffer = []
+    @buffer = ''
   end
 
   def pong
@@ -175,7 +180,7 @@ class TCPSocket
 
   def broadcast_frame
     roommate.write make_frame(@data, frame.type)
-    warn "[INFO] Broadcasted payload to #{roommate}"
+    logger.info "Broadcasted payload to #{roommate}"
   end
 
   # Talkroom methods
