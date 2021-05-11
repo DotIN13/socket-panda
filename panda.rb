@@ -33,7 +33,7 @@ end
 # Extend Ruby TCPSocket class
 class TCPSocket
   attr_accessor :handshake, :http_request, :room, :opened, :frame
-  attr_reader :hall
+  attr_reader :hall, :opcode
 
   def close
     super
@@ -60,15 +60,19 @@ class TCPSocket
     hall.checkin(self)
   end
 
-  def make_frame(data)
-    WebSocket::Frame::Outgoing::Server.new version: handshake.version, data: data, type: :text
+  def make_frame(data, type = :text)
+    WebSocket::Frame::Outgoing::Server.new version: handshake.version, data: data, type: type
   end
 
   def hold
     recvframe
     # Close socket if closing frame received or an error occured
     warn '[WARN] Responding with closing frame, closing socket'
-    write WebSocket::Frame::Outgoing::Server.new version: handshake.version, type: :close
+    begin
+      write WebSocket::Frame::Outgoing::Server.new version: handshake.version, type: :close
+    rescue Errno::EPIPE
+      warn '[WARN] Connection lost, no closing frames sent'
+    end
     close
   end
 
@@ -119,36 +123,58 @@ class TCPSocket
       rescue FrameError
         break
       end
-      warn "[INFO] Parsed payload \"#{@text = frame.parse_text}\""
-      pong if frame.is_ping?
+      handle_payload
       next if execute_commands
 
-      broadcast_frame
+      broadcast_frame if frame.fin? && roommate
     end
   end
 
   # Command detection and distribution
   def execute_commands
-    return change_room if @text.start_with?('PUT')
+    return unless frame.fin? && frame.text?
+
+    return change_room if @data.start_with?('PUT')
 
     false
   end
 
+  def handle_payload
+    concat_payload
+    # Store opcode if not finished
+    return pong if frame.ping?
+    return @opcode = frame.opcode unless frame.fin?
+
+    # Process data
+    warn "[INFO] Parsed payload \"#{@data.force_encoding('utf-8')[0..20]}...\"" if frame.text?
+    # Do nothing if binary
+    warn '[INFO] Received binary frame as is' if frame.binary?
+  end
+
+  def concat_payload
+    @buffer ||= []
+    @buffer += frame.unmask
+    return unless frame.fin?
+
+    # Update @data if finished
+    @data = @buffer.pack('C*')
+    # Release buffer if finished
+    @buffer = []
+  end
+
   def pong
-    write WebSocket::Frame::Outgoing::Server.new version: handshake.version, data: @text, type: :pong
+    write WebSocket::Frame::Outgoing::Server.new version: handshake.version, data: @data, type: :pong
   end
 
   def change_room
-    hall.checkin(self, @text.split(' ').last)
+    hall.checkin(self, @data.split(' ').last)
     # Respond with room change complete message
-    write make_frame(@text)
+    write make_frame(@data)
     true
   end
 
   def broadcast_frame
-    return unless roommate
-
-    roommate.write make_frame(@text)
+    roommate.write make_frame(@data, frame.type)
     warn "[INFO] Broadcasted payload to #{roommate}"
   end
 

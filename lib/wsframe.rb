@@ -1,12 +1,11 @@
 # Parse Websocket frames
 class WSFrame
-  attr_accessor :socket, :bytes, :payload, :payload_size, :is_masked, :mask
+  attr_accessor :socket, :bytes, :payload, :payload_size, :is_masked, :mask, :opcode
 
   def initialize(socket)
     warn '[INFO] Awaiting incoming frame'
     @socket = socket
     @bytes = []
-    @payload = []
   end
 
   def receive
@@ -22,10 +21,10 @@ class WSFrame
     bytes << socket.getbyte
     @fin = bytes[0][7]
     @opcode = bytes[0][0..3]
+    @opcode = socket.opcode if @opcode.zero?
     warn "[INFO] Reveived frame with opcode #{@opcode} and fin #{@fin}"
     warn '[WARN] Received closing frame' if @opcode == 0x08
-    raise FrameError, "We don't support continuations" if @fin.zero?
-    raise FrameError, 'Opcode unsupported' unless [0x01, 0x08].include? @opcode
+    raise FrameError, 'Opcode unsupported' unless [0x01, 0x02, 0x08].include? @opcode
   end
 
   def parse_size
@@ -34,6 +33,7 @@ class WSFrame
     @is_masked = bytes[1] & 0b10000000
     warn "[INFO] Payload is #{is_masked ? 'masked' : 'not masked'}"
     self.payload_size = bytes[1] & 0b01111111
+    warn "[INFO] Initial payload size #{payload_size}"
     # Handle extended payload length
     handle_extended_length(payload_size) if payload_size > 125
     warn "[INFO] Received frame of size #{payload_size}"
@@ -42,10 +42,8 @@ class WSFrame
   def handle_extended_length(initial_size)
     raise 'Incorrect payload size' if initial_size > 127
 
-    extend_length = 2 if initial_size == 126
-    extend_length = 8 if initial_size == 127
-    extend_length.times.map { bytes << socket.getbyte }
-    self.payload_size = bytes[2..].join.to_i(10)
+    self.payload_size = socket.read(2).unpack1('S>') if initial_size == 126
+    self.payload_size = socket.read(8).unpack1('Q>') if initial_size == 127
   end
 
   def parse_mask
@@ -57,20 +55,45 @@ class WSFrame
   end
 
   def gather_payload
-    payload_size.times { payload << socket.getbyte }
-    warn "[INFO] Received raw payload #{payload}"
+    self.payload = socket.read(payload_size).unpack('C*')
+    warn "[INFO] Received raw payload #{payload.first(20)}..."
     payload.length
   end
 
-  def parse_text
-    if is_masked
-      payload.each_with_index { |byte, i| payload[i] = byte ^ mask[i % 4] }
-      warn "[INFO] Unmasked payload #{payload}"
-    end
-    payload.pack('C*').force_encoding('utf-8')
+  # Record @unmasked state to avoid unmasking multiple times
+  def unmask
+    return payload unless is_masked && !@unmasked
+
+    payload.each_with_index { |byte, i| payload[i] = byte ^ mask[i % 4] }
+    warn "[INFO] Unmasked payload #{payload.first(20)}..."
+    @unmasked = true
+    payload
   end
 
-  def is_ping?
+  def parse_text
+    unmask.pack('C*').force_encoding('utf-8')
+  end
+
+  def ping?
     @opcode == 0x09
+  end
+
+  def binary?
+    @opcode == 0x02
+  end
+
+  def fin?
+    @fin == 0x01
+  end
+
+  def text?
+    @opcode == 0x01
+  end
+
+  def type
+    return :text if @opcode == 0x01
+    return :binary if @opcode == 0x02
+    return :close if @opcode == 0x08
+    return :ping if @opcode == 0x09
   end
 end
