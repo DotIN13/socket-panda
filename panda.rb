@@ -155,11 +155,9 @@ class TCPSocket
 
   def handle_frame(frame)
     # Concat payload if frame is text and starts with commands
-    if @msg_type == :command
-      @data += frame.payload
-    else # Directly forward frames if frame is raw text or binary
-      broadcast_frame(frame)
-    end
+    @data += frame.payload if @msg_type == :command
+    # Directly forward frames nonetheless
+    broadcast_frame(frame)
   end
 
   # Command detection and distribution
@@ -167,7 +165,7 @@ class TCPSocket
     return close if @msg_type == :close
 
     pong if @msg_type == :ping
-    change_room if @data&.start_with?('PUT') && @msg_type == :command
+    change_room if @data.start_with?('PUT') && @msg_type == :command
   end
 
   def msg_type=(type)

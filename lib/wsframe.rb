@@ -8,7 +8,7 @@ class WSFrame
   include PandaLogger
   attr_accessor :socket, :payload, :initial_size, :payload_size, :is_masked, :mask, :opcode, :fin
 
-  COMMANDS = %w[PUT FILE CLIP].freeze
+  COMMANDS = %w[PUT CLIP].freeze
 
   def initialize
     logger.info 'Listening for frames'
