@@ -37,10 +37,16 @@ end
 # Extend Ruby TCPSocket class
 class TCPSocket
   include PandaLogger
-  attr_accessor :handshake, :http_request, :room, :opened, :frame
-  attr_reader :hall, :opcode
+  attr_accessor :handshake, :http_request, :room, :opened
+  attr_reader :hall
 
   def close
+    logger.warn 'Responding with closing frame, closing socket'
+    begin
+      write WebSocket::Frame::Outgoing::Server.new version: handshake.version, type: :close
+    rescue Errno::EPIPE
+      logger.warn 'Connection lost, no closing frames sent'
+    end
     super
     @opened = false
     checkout
@@ -72,19 +78,15 @@ class TCPSocket
   def hold
     recvframe
     # Close socket if closing frame received or an error occured
-    logger.warn 'Responding with closing frame, closing socket'
-    begin
-      write WebSocket::Frame::Outgoing::Server.new version: handshake.version, type: :close
-    rescue Errno::EPIPE
-      logger.warn 'Connection lost, no closing frames sent'
-    end
     close
   end
 
   # Talkroom methods
   def checkout
-    hall[room]&.checkout(self)
-    logger.warn "Guest left room ##{room}"
+    if hall[room]
+      hall[room].checkout(self)
+      logger.warn "Guest left room ##{room}"
+    end
     self.room = nil
   end
 
@@ -121,53 +123,60 @@ class TCPSocket
 
   def recvframe
     while opened
-      # Get frames
-      @frame = WSFrame.new(self)
-      begin
-        break unless @frame.receive
-      rescue FrameError
-        break
+      @data = ''
+      recvmsg.lazy.each_with_index do |frame, index|
+        self.msg_type = frame.type if index.zero?
+        handle_frame(frame)
       end
-      handle_payload
-      next if execute_commands
+      execute_commands
+    end
+  end
 
-      broadcast_frame if frame.fin? && roommate
+  # Receive full message
+  # Until finish
+  def recvmsg
+    # New enumerator per message
+    Enumerator.new do |buffer|
+      logger.info 'Listening for messages'
+      loop do
+        # Get frames
+        frame = WSFrame.new
+        frame.socket = self
+        begin
+          buffer << frame.receive
+        rescue FrameError
+          break close
+        end
+        break if frame.fin?
+      end
+      logger.info 'Message end'
+    end
+  end
+
+  def handle_frame(frame)
+    # Concat payload if frame is text and starts with commands
+    if @msg_type == :command
+      @data += frame.payload
+    else # Directly forward frames if frame is raw text or binary
+      broadcast_frame(frame)
     end
   end
 
   # Command detection and distribution
   def execute_commands
-    return unless frame.fin? && frame.text?
+    return close if @msg_type == :close
 
-    return change_room if @data.start_with?('PUT')
-
-    false
+    pong if @msg_type == :ping
+    change_room if @data&.start_with?('PUT') && @msg_type == :command
   end
 
-  def handle_payload
-    concat_payload
-    # Store opcode if not finished
-    return pong if frame.ping?
-    return @opcode = frame.opcode unless frame.fin?
-
-    # Process data
-    logger.info "Parsed payload \"#{@data.force_encoding('utf-8')[0..20]}...\"" if frame.text?
-    # Do nothing if binary
-    logger.info 'Received binary frame as is' if frame.binary?
-  end
-
-  def concat_payload
-    @buffer ||= ''
-    @buffer += frame.to_s
-    return unless frame.fin?
-
-    # Update @data if finished
-    @data = @buffer
-    # Release buffer if finished
-    @buffer = ''
+  def msg_type=(type)
+    @msg_type = type
+    logger.info "Received #{@msg_type} frame"
   end
 
   def pong
+    logger.info 'Responding ping with a pong'
     write WebSocket::Frame::Outgoing::Server.new version: handshake.version, data: @data, type: :pong
   end
 
@@ -178,9 +187,11 @@ class TCPSocket
     true
   end
 
-  def broadcast_frame
-    roommate.write make_frame(@data, frame.type)
-    logger.info "Broadcasted payload to #{roommate}"
+  def broadcast_frame(frame)
+    return unless roommate
+
+    roommate.write frame.prepare
+    logger.info "Broadcasted frame to #{roommate}"
   end
 
   # Talkroom methods
