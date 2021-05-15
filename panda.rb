@@ -45,7 +45,9 @@ class TCPSocket
     begin
       write WebSocket::Frame::Outgoing::Server.new version: handshake.version, type: :close
     rescue Errno::EPIPE
-      logger.warn 'Connection lost, no closing frames sent'
+      logger.warn 'Broken pipe, no closing frames sent'
+    rescue IOError
+      logger.warn 'Closed stream, no closing frames sent'
     end
     super
     @opened = false
