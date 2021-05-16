@@ -41,18 +41,20 @@ class TCPSocket
   attr_reader :hall
 
   def close
-    logger.warn 'Responding with closing frame, closing socket'
-    begin
-      write WebSocket::Frame::Outgoing::Server.new version: handshake.version, type: :close
-    rescue Errno::EPIPE
-      logger.warn 'Broken pipe, no closing frames sent'
-    rescue IOError
-      logger.warn 'Closed stream, no closing frames sent'
-    end
+    signal_close
     super
     @opened = false
     checkout
     logger.warn 'Socket closed'
+  end
+
+  def signal_close
+    logger.warn 'Closing socket with closing frame'
+    write WebSocket::Frame::Outgoing::Server.new version: handshake.version, type: :close
+  rescue Errno::EPIPE
+    logger.warn 'Broken pipe, no closing frames sent'
+  rescue IOError
+    logger.warn 'Closed stream, no closing frames sent'
   end
 
   def shake
