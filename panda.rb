@@ -6,6 +6,7 @@ require_relative 'lib/hall'
 require_relative 'lib/wsframe'
 require_relative 'lib/exeption'
 require_relative 'lib/panda_logger'
+require_relative 'lib/constant'
 
 # WSServer
 class Server
@@ -37,8 +38,9 @@ end
 # Extend Ruby TCPSocket class
 class TCPSocket
   include PandaLogger
+  include PandaConstants
   attr_accessor :handshake, :http_request, :room, :opened
-  attr_reader :hall
+  attr_reader :hall, :msg_type
 
   def close
     signal_close
@@ -128,10 +130,7 @@ class TCPSocket
   def recvframe
     while opened
       @data = ''
-      recvmsg.lazy.each_with_index do |frame, index|
-        self.msg_type = frame.type if index.zero?
-        handle_frame(frame)
-      end
+      recvmsg.lazy.each_with_index { |frame, index| handle_frame(frame, index) }
       execute_commands
     end
   end
@@ -157,24 +156,29 @@ class TCPSocket
     end
   end
 
-  def handle_frame(frame)
+  def handle_frame(frame, index)
+    if index.zero?
+      self.msg_type = frame.type
+      # PEND filename if binary
+      broadcast_frame WSFrame.new(fin: 1, opcode: 1, payload: "PEND #{frame.filename}") if msg_type == :binary
+    end
     # Concat payload if frame is text and starts with commands
-    @data += frame.payload if @msg_type == :command
+    @data += frame.payload if COMMANDS.include? msg_type
     # Directly forward frames nonetheless
-    broadcast_frame(frame)
+    broadcast_frame(frame) unless msg_type == :PUT
   end
 
   # Command detection and distribution
   def execute_commands
-    return close if @msg_type == :close
+    return close if msg_type == :close
 
-    pong if @msg_type == :ping
-    change_room if @data.start_with?('PUT') && @msg_type == :command
+    pong if msg_type == :ping
+    change_room if msg_type == :PUT
   end
 
   def msg_type=(type)
     @msg_type = type
-    logger.info "Received #{@msg_type} frame"
+    logger.info "Received #{msg_type} frame"
   end
 
   def pong

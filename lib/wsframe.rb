@@ -2,24 +2,24 @@
 
 require_relative 'panda_logger'
 require_relative 'exeption'
+require_relative 'constant'
 
 # Parse Websocket frames
 class WSFrame
   include PandaLogger
+  include PandaConstants
   attr_accessor :socket, :payload, :initial_size, :payload_size, :is_masked, :mask, :opcode, :fin
 
-  COMMANDS = %w[PUT CLIP].freeze
-
-  def initialize
+  def initialize(opts = {})
+    self.payload = opts[:payload] if opts[:payload]
+    self.opcode = opts[:opcode] if opts[:opcode]
+    self.fin = opts[:fin] if opts[:fin]
+    self.payload_size = payload.bytesize if payload
     logger.info 'Listening for frames'
   end
 
   # Outgoing methods
-  def prepare(opts = {})
-    self.payload ||= opts[:payload]
-    self.payload_size = payload.bytesize
-    self.opcode = opts[:opcode] || opcode
-    self.fin = opts[:fin] || fin
+  def prepare
     data = [(fin << 7) + opcode].pack('C')
     data += prepare_size
     data + payload
@@ -113,20 +113,30 @@ class WSFrame
     @opcode == 0x01
   end
 
-  def command?
+  def command_type
     return unless text?
+    return @command_type if @command_type
 
     COMMANDS.each do |cmd|
-      return true if payload.start_with? cmd
+      @command_type = cmd if payload.start_with? cmd.to_s
     end
-    false
+    @command_type
   end
 
   def type
-    return :command if command?
-    return :text if @opcode == 0x01
-    return :binary if @opcode == 0x02
-    return :close if @opcode == 0x08
-    return :ping if @opcode == 0x09
+    return @command_type if command_type
+    return :text if opcode == 0x01
+    return :binary if opcode == 0x02
+    return :close if opcode == 0x08
+    return :ping if opcode == 0x09
+  end
+
+  # Assuming the first byte comtains the byte length for filename
+  # and the following bytes contains the filename
+  def filename
+    return unless binary?
+
+    name_length = payload[0].unpack1('C')
+    payload[1..name_length]
   end
 end
