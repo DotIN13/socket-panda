@@ -27,7 +27,6 @@ class Server
         logger.info 'Incomming request'
         if socket.shake
           socket.hall = hall
-          socket.write(socket.make_frame("PUT #{socket.room}"))
           socket.hold
         end
       end
@@ -40,7 +39,7 @@ class TCPSocket
   include PandaLogger
   include PandaConstants
   attr_accessor :handshake, :http_request, :room, :opened
-  attr_reader :hall, :msg_type
+  attr_reader :hall, :msg_type, :name
 
   def close
     signal_close
@@ -165,7 +164,7 @@ class TCPSocket
     # Concat payload if frame is text and starts with commands
     @data += frame.payload if COMMANDS.include? msg_type
     # Directly forward frames nonetheless
-    broadcast_frame(frame) unless msg_type == :PUT
+    broadcast_frame(frame) unless msg_type == :ROOM
   end
 
   # Command detection and distribution
@@ -173,7 +172,8 @@ class TCPSocket
     return close if msg_type == :close
 
     pong if msg_type == :ping
-    change_room if msg_type == :PUT
+    handle_name if msg_type == :NAME
+    change_room if msg_type == :ROOM
   end
 
   def msg_type=(type)
@@ -187,10 +187,11 @@ class TCPSocket
   end
 
   def change_room
-    hall.checkin(self, @data.split(' ').last)
-    # Respond with room change complete message
-    write make_frame(@data)
-    true
+    hall.checkin(self, @data[5..])
+  end
+
+  def handle_name
+    @name = @data[5..]
   end
 
   def broadcast_frame(frame)

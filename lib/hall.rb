@@ -3,6 +3,7 @@
 require 'securerandom'
 require_relative 'exeption'
 require_relative 'panda_logger'
+require_relative 'wsframe'
 
 # Talkroom
 class Hall < Hash
@@ -49,6 +50,16 @@ class Room
     raise RoomFullError, "Talkroom ##{id} is full" if guests.length > 1
 
     guests << guest
+    notify
+  end
+
+  def notify
+    guests.last.write WSFrame.new(fin: 1, opcode: 1, payload: "ROOM #{id}").prepare
+    return unless guests.length == 2
+
+    # Notify both party of their names
+    guests.first.write WSFrame.new(fin: 1, opcode: 1, payload: "PEER #{guests.last.name}").prepare
+    guests.last.write WSFrame.new(fin: 1, opcode: 1, payload: "PEER #{guests.first.name}").prepare
   end
 
   def checkout(guest)

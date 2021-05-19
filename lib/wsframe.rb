@@ -10,7 +10,8 @@ class WSFrame
   include PandaConstants
   attr_accessor :socket, :payload, :initial_size, :payload_size, :is_masked, :mask, :opcode, :fin
 
-  def initialize(opts = {})
+  # Try refactor
+  def initialize(opts = { payload: '', fin: 1, opcode: 1 })
     self.payload = opts[:payload] if opts[:payload]
     self.opcode = opts[:opcode] if opts[:opcode]
     self.fin = opts[:fin] if opts[:fin]

@@ -1,3 +1,3 @@
 module PandaConstants
-  COMMANDS = %i[PUT CLIP].freeze
+  COMMANDS = %i[ROOM CLIP NAME].freeze
 end
