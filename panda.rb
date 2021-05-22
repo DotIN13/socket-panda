@@ -39,7 +39,7 @@ class TCPSocket
   include PandaLogger
   include PandaConstants
   attr_accessor :handshake, :http_request, :room, :opened
-  attr_reader :hall, :msg_type, :name
+  attr_reader :hall, :msg_type, :name, :id
 
   def close
     signal_close
@@ -76,6 +76,13 @@ class TCPSocket
     hall.checkin(self)
   end
 
+  def read_on_ready(timeout = 3)
+    ready = IO.select [self], nil, nil, timeout
+    raise HandshakeError, 'Socket read timeout' unless ready
+
+    yield ready.first.first
+  end
+
   def make_frame(data, type = :text)
     WebSocket::Frame::Outgoing::Server.new version: handshake.version, data: data, type: type
   end
@@ -88,11 +95,12 @@ class TCPSocket
 
   # Talkroom methods
   def checkout
-    if hall[room]
-      hall[room].checkout(self)
-      logger.warn "Guest left room ##{room}"
-    end
+    hall.rooms[room]&.checkout(self)
     self.room = nil
+  end
+
+  def roommate
+    (hall.rooms[room].guests - [self]).first
   end
 
   private
@@ -102,7 +110,7 @@ class TCPSocket
     # Always get line before breaking from loop
     # For HTTP request must end with "\r\n"
     loop do
-      line = read_line
+      line = read_on_ready(&:gets)
       return false unless line
 
       self.http_request += line
@@ -111,13 +119,6 @@ class TCPSocket
     raise HandshakeError, 'Invalid websocket request' unless http_request.downcase.include? 'upgrade: websocket'
 
     logger.info "Received HTTP request: #{http_request}"
-  end
-
-  def read_line
-    ready = IO.select [self], nil, nil, 3
-    raise HandshakeError, 'HTTP request timeout' unless ready
-
-    ready.first.first.gets
   end
 
   def create_handshake
@@ -164,16 +165,21 @@ class TCPSocket
     # Concat payload if frame is text and starts with commands
     @data += frame.payload if COMMANDS.include? msg_type
     # Directly forward frames nonetheless
-    broadcast_frame(frame) unless msg_type == :ROOM
+    broadcast_frame(frame) unless %i[ROOM ping].include? msg_type
   end
 
   # Command detection and distribution
   def execute_commands
-    return close if msg_type == :close
-
-    pong if msg_type == :ping
-    handle_name if msg_type == :NAME
-    change_room if msg_type == :ROOM
+    case msg_type
+    when :close
+      close
+    when :ping
+      pong
+    when :NAME
+      handle_name
+    when :ROOM
+      change_room
+    end
   end
 
   def msg_type=(type)
@@ -183,7 +189,8 @@ class TCPSocket
 
   def pong
     logger.info 'Responding ping with a pong'
-    write WebSocket::Frame::Outgoing::Server.new version: handshake.version, data: @data, type: :pong
+    # Respond with text pong as javascript API does not support pong frame handling
+    write WebSocket::Frame::Outgoing::Server.new version: handshake.version, data: 'PONG', type: :text
   end
 
   def change_room
@@ -191,19 +198,15 @@ class TCPSocket
   end
 
   def handle_name
-    @name = @data[5..]
+    @name, @id = @data[5..].split(' ')
+    hall.guests << id
   end
 
   def broadcast_frame(frame)
     return unless roommate
 
     roommate.write frame.prepare
-    logger.info "Broadcasted frame to #{roommate}"
-  end
-
-  # Talkroom methods
-  def roommate
-    (hall[room].guests - [self]).first
+    logger.info "Broadcasted frame to #{roommate.name}"
   end
 end
 

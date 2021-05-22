@@ -1,35 +1,42 @@
 # frozen_string_literal: true
 
 require 'securerandom'
+require 'set'
 require_relative 'exeption'
 require_relative 'panda_logger'
 require_relative 'wsframe'
 
 # Talkroom
-class Hall < Hash
+class Hall
   include PandaLogger
+  attr_reader :rooms, :guests
+
+  def initialize
+    @rooms = {}
+    @guests = Set.new
+  end
 
   # room should be symbol
   def checkin(guest, room = nil)
     guest.checkout
     room = room ? room.to_sym : new_room
-    self[room] ||= Room.new(room)
+    rooms[room] ||= Room.new(room)
     begin
-      raise NoRoomError, "No room available with id ##{room}" unless self[room]
+      raise NoRoomError, "No room available with id ##{room}" unless rooms[room]
 
-      self[room] << guest
+      rooms[room] << guest
     rescue TalkRoomError
       room = new_room
-      self[room] = Room.new(room)
+      rooms[room] = Room.new(room)
       retry
     end
     guest.room = room
-    logger.info "Guest joined room ##{room} with #{self[room].guests}"
+    logger.info "#{guest.name || 'Guest'} joined room ##{room} with #{guest.roommate&.name || 'himself'}"
   end
 
   def new_room
     number = SecureRandom.alphanumeric.to_sym
-    return number unless self[number]
+    return number unless rooms[number]
 
     new_room
   end
@@ -38,6 +45,7 @@ end
 # Serve as components for the hall
 # Can only be occupied by two
 class Room
+  include PandaLogger
   attr_accessor :guests, :id
 
   def initialize(id, host = nil)
@@ -63,6 +71,7 @@ class Room
   end
 
   def checkout(guest)
+    logger.warn "Guest #{guest.name} left room ##{id}"
     guests.delete guest
   end
 end

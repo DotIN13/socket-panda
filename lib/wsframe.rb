@@ -47,17 +47,26 @@ class WSFrame
   end
 
   def parse_info
-    first = socket.getbyte
-    self.fin = first[7]
-    self.opcode = first[0..3]
+    begin
+      recv_first_byte
+    rescue NoMethodError
+      logger.warn 'Socket not ready, retrying'
+      retry
+    end
     logger.info "Reveived frame with opcode #{opcode} and fin #{fin}"
     logger.warn 'Received closing frame' if opcode == 0x08
     raise FrameError, 'Opcode unsupported' unless [0x00, 0x01, 0x02, 0x08].include? opcode
   end
 
+  def recv_first_byte
+    first = socket.read_on_ready(nil, &:getbyte)
+    self.fin = first[7]
+    self.opcode = first[0..3]
+  end
+
   def parse_size
     # Read the next bytes containing mask option and initial payload length
-    second = socket.getbyte
+    second = socket.read_on_ready(&:getbyte)
     self.is_masked = second & 0b10000000
     logger.info 'Payload is masked' if is_masked
     self.initial_size = second & 0b01111111
@@ -79,12 +88,12 @@ class WSFrame
     return unless is_masked
 
     # Do not include mask in bytes
-    @mask = 4.times.map { socket.getbyte }
+    @mask = 4.times.map { socket.read_on_ready(&:getbyte) }
     logger.info "Parsed mask #{mask}"
   end
 
   def gather_payload
-    self.payload = socket.read(payload_size).unpack('C*')
+    self.payload = socket.read_on_ready { |conn| conn.read(payload_size) }.unpack('C*')
     logger.info "Received raw payload #{payload.first(20)}..."
   end
 
@@ -99,7 +108,7 @@ class WSFrame
   end
 
   def ping?
-    @opcode == 0x09
+    @opcode == 0x09 || (text? && payload.start_with?('PING'))
   end
 
   def binary?
@@ -114,6 +123,10 @@ class WSFrame
     @opcode == 0x01
   end
 
+  def close?
+    @opcode == 0x08
+  end
+
   def command_type
     return unless text?
     return @command_type if @command_type
@@ -126,10 +139,10 @@ class WSFrame
 
   def type
     return @command_type if command_type
-    return :text if opcode == 0x01
-    return :binary if opcode == 0x02
-    return :close if opcode == 0x08
-    return :ping if opcode == 0x09
+    return :ping if ping?
+    return :text if text?
+    return :binary if binary?
+    return :close if close?
   end
 
   # Assuming the first byte comtains the byte length for filename
