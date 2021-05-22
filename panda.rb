@@ -165,7 +165,7 @@ class TCPSocket
     # Concat payload if frame is text and starts with commands
     @data += frame.payload if COMMANDS.include? msg_type
     # Directly forward frames nonetheless
-    broadcast_frame(frame) unless %i[ROOM ping].include? msg_type
+    broadcast_frame(frame) unless %i[ROOM ping close].include? msg_type
   end
 
   # Command detection and distribution

@@ -72,6 +72,7 @@ class Room
 
   def checkout(guest)
     logger.warn "Guest #{guest.name} left room ##{id}"
+    guest.roommate&.write WSFrame.new(fin: 1, opcode: 1, payload: "POUT #{guest.name}").prepare
     guests.delete guest
   end
 end
