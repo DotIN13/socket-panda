@@ -47,12 +47,7 @@ class WSFrame
   end
 
   def parse_info
-    begin
-      recv_first_byte
-    rescue NoMethodError
-      logger.warn 'Socket not ready, retrying'
-      retry
-    end
+    recv_first_byte
     logger.info "Reveived frame with opcode #{opcode} and fin #{fin}"
     logger.warn 'Received closing frame' if opcode == 0x08
     raise FrameError, 'Opcode unsupported' unless [0x00, 0x01, 0x02, 0x08].include? opcode

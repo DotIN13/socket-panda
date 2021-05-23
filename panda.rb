@@ -38,8 +38,8 @@ end
 class TCPSocket
   include PandaLogger
   include PandaConstants
-  attr_accessor :handshake, :http_request, :room, :opened
-  attr_reader :hall, :msg_type, :name, :id
+  attr_accessor :hall, :handshake, :http_request, :opened
+  attr_reader :room, :msg_type, :name, :id
 
   def close
     signal_close
@@ -71,14 +71,9 @@ class TCPSocket
     @opened = true
   end
 
-  def hall=(hall)
-    @hall = hall
-    hall.checkin(self)
-  end
-
   def read_on_ready(timeout = 3)
     ready = IO.select [self], nil, nil, timeout
-    raise HandshakeError, 'Socket read timeout' unless ready
+    raise PandaSocketError, 'Socket read timeout' unless ready
 
     yield ready.first.first
   end
@@ -95,11 +90,20 @@ class TCPSocket
 
   # Talkroom methods
   def checkout
-    hall.rooms[room]&.checkout(self)
+    # Checkout from previous room
+    hall.rooms[hall.guests[id]]&.checkout(id)
     self.room = nil
   end
 
+  def room=(number)
+    @room = number
+    hall.guests[id] = number
+    logger.info "#{name || 'Guest'} joined room ##{room} with #{roommate&.name || 'himself'}" if number
+  end
+
   def roommate
+    return unless hall.rooms[room]
+
     (hall.rooms[room].guests - [self]).first
   end
 
@@ -165,7 +169,7 @@ class TCPSocket
     # Concat payload if frame is text and starts with commands
     @data += frame.payload if COMMANDS.include? msg_type
     # Directly forward frames nonetheless
-    broadcast_frame(frame) unless %i[ROOM PING ping close].include? msg_type
+    broadcast_frame(frame) unless %i[ROOM PING NAME ping close].include? msg_type
   end
 
   # Command detection and distribution
@@ -200,7 +204,8 @@ class TCPSocket
 
   def handle_name
     @name, @id = @data[5..].split(' ')
-    hall.guests << id
+    hall.reset_guest(id)
+    hall.checkin(self)
   end
 
   def broadcast_frame(frame)

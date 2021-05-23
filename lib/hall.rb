@@ -13,7 +13,7 @@ class Hall
 
   def initialize
     @rooms = {}
-    @guests = Set.new
+    @guests = {}
   end
 
   # room should be symbol
@@ -31,7 +31,6 @@ class Hall
       retry
     end
     guest.room = room
-    logger.info "#{guest.name || 'Guest'} joined room ##{room} with #{guest.roommate&.name || 'himself'}"
   end
 
   def new_room
@@ -39,6 +38,10 @@ class Hall
     return number unless rooms[number]
 
     new_room
+  end
+
+  def reset_guest(id)
+    rooms[guests[id]]&.guests&.select { |guest| guest.id == id }&.first&.close
   end
 end
 
@@ -70,9 +73,11 @@ class Room
     guests.last.write WSFrame.new(fin: 1, opcode: 1, payload: "PEER #{guests.first.name}").prepare
   end
 
-  def checkout(guest)
+  def checkout(guest_id)
+    guest = guests.select { |person| person.id == guest_id }.first
+    return unless guests.delete guest
+
     logger.warn "Guest #{guest.name} left room ##{id}"
     guest.roommate&.write WSFrame.new(fin: 1, opcode: 1, payload: "POUT #{guest.name}").prepare
-    guests.delete guest
   end
 end
