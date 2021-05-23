@@ -165,7 +165,7 @@ class TCPSocket
     # Concat payload if frame is text and starts with commands
     @data += frame.payload if COMMANDS.include? msg_type
     # Directly forward frames nonetheless
-    broadcast_frame(frame) unless %i[ROOM ping close].include? msg_type
+    broadcast_frame(frame) unless %i[ROOM PING ping close].include? msg_type
   end
 
   # Command detection and distribution
@@ -173,7 +173,7 @@ class TCPSocket
     case msg_type
     when :close
       close
-    when :ping
+    when :ping, :PING
       pong
     when :NAME
       handle_name
@@ -190,7 +190,8 @@ class TCPSocket
   def pong
     logger.info 'Responding ping with a pong'
     # Respond with text pong as javascript API does not support pong frame handling
-    write WebSocket::Frame::Outgoing::Server.new version: handshake.version, data: 'PONG', type: :text
+    res = msg_type == :ping ? :pong : :text
+    write WebSocket::Frame::Outgoing::Server.new version: handshake.version, data: 'PONG', type: res
   end
 
   def change_room

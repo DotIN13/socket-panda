@@ -108,7 +108,7 @@ class WSFrame
   end
 
   def ping?
-    @opcode == 0x09 || (text? && payload.start_with?('PING'))
+    @opcode == 0x09
   end
 
   def binary?
@@ -139,10 +139,10 @@ class WSFrame
 
   def type
     return @command_type if command_type
-    return :ping if ping?
     return :text if text?
     return :binary if binary?
     return :close if close?
+    return :ping if ping?
   end
 
   # Assuming the first byte comtains the byte length for filename
