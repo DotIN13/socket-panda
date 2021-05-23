@@ -87,7 +87,7 @@ class TCPSocket
     # Close socket if closing frame received or an error occured
     close
   rescue IOError => e
-    logger.warn e.message
+    logger.warn e.message.capitalize
   end
 
   # Talkroom methods
