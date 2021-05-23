@@ -17,20 +17,20 @@ class Hall
   end
 
   # room should be symbol
-  def checkin(guest, room = nil)
+  def checkin(guest, number = nil)
     guest.checkout
-    room = room ? room.to_sym : new_room
-    rooms[room] ||= Room.new(room)
+    number = number ? number.to_sym : new_room
+    rooms[number] ||= Room.new(number)
     begin
-      raise NoRoomError, "No room available with id ##{room}" unless rooms[room]
+      raise NoRoomError, "No room available with id ##{number}" unless rooms[number]
 
-      rooms[room] << guest
+      rooms[number] << guest
     rescue TalkRoomError
-      room = new_room
-      rooms[room] = Room.new(room)
+      number = new_room
+      rooms[number] = Room.new(number)
       retry
     end
-    guest.room = room
+    guest.room = number
   end
 
   def new_room
@@ -40,8 +40,12 @@ class Hall
     new_room
   end
 
-  def reset_guest(id)
-    rooms[guests[id]]&.guests&.select { |guest| guest.id == id }&.first&.close
+  def remove_ghost(id)
+    guest = rooms[guests[id]]&.guests&.select { |person| person.id == id }&.first
+    return unless guest
+
+    guest.checkout
+    guest.close
   end
 end
 

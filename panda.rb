@@ -39,7 +39,7 @@ class TCPSocket
   include PandaLogger
   include PandaConstants
   attr_accessor :hall, :handshake, :http_request, :opened
-  attr_reader :room, :msg_type, :name, :id
+  attr_reader :msg_type, :name, :id
 
   def close
     signal_close
@@ -86,6 +86,8 @@ class TCPSocket
     recvframe
     # Close socket if closing frame received or an error occured
     close
+  rescue IOError => e
+    logger.warn e.message
   end
 
   # Talkroom methods
@@ -96,9 +98,16 @@ class TCPSocket
   end
 
   def room=(number)
-    @room = number
-    hall.guests[id] = number
-    logger.info "#{name || 'Guest'} joined room ##{room} with #{roommate&.name || 'himself'}" if number
+    if number
+      hall.guests[id] = number
+      logger.info "#{name || 'Guest'} joined room ##{room} with #{roommate&.name || 'himself'}"
+    else
+      hall.guests.delete id
+    end
+  end
+
+  def room
+    hall.guests[id]
   end
 
   def roommate
@@ -204,7 +213,11 @@ class TCPSocket
 
   def handle_name
     @name, @id = @data[5..].split(' ')
-    hall.reset_guest(id)
+    @id = id.to_sym
+    # Remove dead connection from previous room
+    hall.remove_ghost(id)
+    # Join room only after name is received
+    logger.info "Checking in #{name} for the first time"
     hall.checkin(self)
   end
 

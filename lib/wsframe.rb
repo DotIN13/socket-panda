@@ -16,7 +16,6 @@ class WSFrame
     self.opcode = opts[:opcode] if opts[:opcode]
     self.fin = opts[:fin] if opts[:fin]
     self.payload_size = payload.bytesize if payload
-    logger.info 'Listening for frames'
   end
 
   # Outgoing methods
@@ -54,14 +53,14 @@ class WSFrame
   end
 
   def recv_first_byte
-    first = socket.read_on_ready(nil, &:getbyte)
+    first = socket.getbyte
     self.fin = first[7]
     self.opcode = first[0..3]
   end
 
   def parse_size
     # Read the next bytes containing mask option and initial payload length
-    second = socket.read_on_ready(&:getbyte)
+    second = socket.getbyte
     self.is_masked = second & 0b10000000
     logger.info 'Payload is masked' if is_masked
     self.initial_size = second & 0b01111111
