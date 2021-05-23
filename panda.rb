@@ -3,7 +3,7 @@
 require 'websocket'
 require 'socket'
 require_relative 'lib/hall'
-require_relative 'lib/wsframe'
+require_relative 'lib/frame'
 require_relative 'lib/exeption'
 require_relative 'lib/panda_logger'
 require_relative 'lib/constant'
@@ -38,7 +38,7 @@ end
 class TCPSocket
   include PandaLogger
   include PandaConstants
-  attr_accessor :hall, :handshake, :http_request, :opened
+  attr_accessor :hall, :room, :handshake, :http_request, :opened
   attr_reader :msg_type, :name, :id
 
   def close
@@ -51,7 +51,7 @@ class TCPSocket
 
   def signal_close
     logger.warn 'Closing socket with closing frame'
-    write WebSocket::Frame::Outgoing::Server.new version: handshake.version, type: :close
+    PandaFrame::Outgoing.new(fin: 1, opcode: 8, payload: 'CLOSE').send self
   rescue Errno::EPIPE
     logger.warn 'Broken pipe, no closing frames sent'
   rescue IOError
@@ -73,13 +73,9 @@ class TCPSocket
 
   def read_on_ready(timeout = 3)
     ready = IO.select [self], nil, nil, timeout
-    raise PandaSocketError, 'Socket read timeout' unless ready
+    raise SocketTimeout, 'Socket read timeout' unless ready
 
     yield ready.first.first
-  end
-
-  def make_frame(data, type = :text)
-    WebSocket::Frame::Outgoing::Server.new version: handshake.version, data: data, type: type
   end
 
   def hold
@@ -88,32 +84,19 @@ class TCPSocket
     close
   rescue IOError => e
     logger.warn e.message.capitalize
+  rescue SocketTimeout
+    close
   end
 
   # Talkroom methods
   def checkout
     # Checkout from previous room
-    hall.rooms[hall.guests[id]]&.checkout(id)
+    room&.checkout(self)
     self.room = nil
   end
 
-  def room=(number)
-    if number
-      hall.guests[id] = number
-      logger.info "#{name || 'Guest'} joined room ##{room} with #{roommate&.name || 'himself'}"
-    else
-      hall.guests.delete id
-    end
-  end
-
-  def room
-    hall.guests[id]
-  end
-
   def roommate
-    return unless hall.rooms[room]
-
-    (hall.rooms[room].guests - [self]).first
+    room&.other(self)
   end
 
   private
@@ -156,7 +139,7 @@ class TCPSocket
       logger.info 'Listening for messages'
       loop do
         # Get frames
-        frame = WSFrame.new
+        frame = PandaFrame::Incomming.new
         frame.socket = self
         begin
           buffer << frame.receive
@@ -173,7 +156,7 @@ class TCPSocket
     if index.zero?
       self.msg_type = frame.type
       # PEND filename if binary
-      broadcast_frame WSFrame.new(fin: 1, opcode: 1, payload: "PEND #{frame.filename}") if msg_type == :binary
+      broadcast_frame PandaFrame::OutgoingText.new("PEND #{frame.filename}") if msg_type == :binary
     end
     # Concat payload if frame is text and starts with commands
     @data += frame.payload if COMMANDS.include? msg_type
@@ -203,8 +186,8 @@ class TCPSocket
   def pong
     logger.info 'Responding ping with a pong'
     # Respond with text pong as javascript API does not support pong frame handling
-    res = msg_type == :ping ? :pong : :text
-    write WebSocket::Frame::Outgoing::Server.new version: handshake.version, data: 'PONG', type: res
+    res = msg_type == :ping ? 0x0A : 0x01
+    PandaFrame::Outgoing.new(fin: 1, opcode: res, payload: 'PONG').send self
   end
 
   def change_room
@@ -215,7 +198,7 @@ class TCPSocket
     @name, @id = @data[5..].split(' ')
     @id = id.to_sym
     # Remove dead connection from previous room
-    hall.remove_ghost(id)
+    # hall.remove_ghost(id)
     # Join room only after name is received
     logger.info "Checking in #{name} for the first time"
     hall.checkin(self)
@@ -224,7 +207,7 @@ class TCPSocket
   def broadcast_frame(frame)
     return unless roommate
 
-    roommate.write frame.prepare
+    frame.send roommate
     logger.info "Broadcasted frame to #{roommate.name}"
   end
 end

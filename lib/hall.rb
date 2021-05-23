@@ -4,7 +4,7 @@ require 'securerandom'
 require 'set'
 require_relative 'exeption'
 require_relative 'panda_logger'
-require_relative 'wsframe'
+require_relative 'frame'
 
 # Talkroom
 class Hall
@@ -19,33 +19,26 @@ class Hall
   # room should be symbol
   def checkin(guest, number = nil)
     guest.checkout
-    number = number ? number.to_sym : new_room
+    number = number ? number.to_sym : new_room_number
     rooms[number] ||= Room.new(number)
     begin
       raise NoRoomError, "No room available with id ##{number}" unless rooms[number]
 
       rooms[number] << guest
     rescue TalkRoomError
-      number = new_room
+      number = new_room_number
       rooms[number] = Room.new(number)
       retry
     end
-    guest.room = number
+    guest.room = rooms[number]
+    logger.info "#{guest.name || 'Guest'} joined room ##{number} with #{guest.roommate&.name || 'himself'}"
   end
 
-  def new_room
+  def new_room_number
     number = SecureRandom.alphanumeric.to_sym
     return number unless rooms[number]
 
-    new_room
-  end
-
-  def remove_ghost(id)
-    guest = rooms[guests[id]]&.guests&.select { |person| person.id == id }&.first
-    return unless guest
-
-    guest.checkout
-    guest.close
+    new_room_number
   end
 end
 
@@ -68,20 +61,27 @@ class Room
     notify
   end
 
+  def other(guest)
+    return unless (index = guests.index(guest))
+
+    guests[index - 1]
+  end
+
   def notify
-    guests.last.write WSFrame.new(fin: 1, opcode: 1, payload: "ROOM #{id}").prepare
+    PandaFrame::OutgoingText.new("ROOM #{id}").send guests.last
     return unless guests.length == 2
 
     # Notify both party of their names
-    guests.first.write WSFrame.new(fin: 1, opcode: 1, payload: "PEER #{guests.last.name}").prepare
-    guests.last.write WSFrame.new(fin: 1, opcode: 1, payload: "PEER #{guests.first.name}").prepare
+    PandaFrame::OutgoingText.new("PEER #{guests.last.name}").send guests.first
+    PandaFrame::OutgoingText.new("PEER #{guests.first.name}").send guests.last
   end
 
-  def checkout(guest_id)
-    guest = guests.select { |person| person.id == guest_id }.first
+  def checkout(guest)
     return unless guests.delete guest
 
     logger.warn "Guest #{guest.name} left room ##{id}"
-    guest.roommate&.write WSFrame.new(fin: 1, opcode: 1, payload: "POUT #{guest.name}").prepare
+    PandaFrame::OutgoingText.new("POUT #{guest.name}").send guest.roommate
   end
+
+  alias add <<
 end

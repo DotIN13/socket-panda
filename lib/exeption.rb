@@ -18,6 +18,9 @@ end
 class HandshakeError < PandaSocketError
 end
 
+class SocketTimeout < PandaSocketError
+end
+
 class TalkRoomError < PandaSocketError
 end
 
