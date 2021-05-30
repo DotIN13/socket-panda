@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative '../panda_logger'
+require_relative '../panda_logging'
 require_relative '../exeption'
 require_relative '../constant'
 
@@ -8,7 +8,7 @@ require_relative '../constant'
 module PandaFrame
   # General methods
   class Common
-    include PandaLogger
+    include PandaLogging
     include PandaConstants
     attr_accessor :payload, :initial_size, :payload_size, :is_masked, :mask, :opcode, :fin
 

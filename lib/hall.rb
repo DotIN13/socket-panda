@@ -1,14 +1,13 @@
 # frozen_string_literal: true
 
 require 'securerandom'
-require 'set'
 require_relative 'exeption'
-require_relative 'panda_logger'
+require_relative 'panda_logging'
 require_relative 'frame'
 
 # Talkroom
 class Hall
-  include PandaLogger
+  include PandaLogging
   attr_reader :rooms, :guests
 
   def initialize
@@ -35,7 +34,7 @@ class Hall
   end
 
   def new_room_number
-    number = SecureRandom.alphanumeric.to_sym
+    number = SecureRandom.random_number(999_999).to_s.rjust(6, '0').to_sym
     return number unless rooms[number]
 
     new_room_number
@@ -45,7 +44,7 @@ end
 # Serve as components for the hall
 # Can only be occupied by two
 class Room
-  include PandaLogger
+  include PandaLogging
   attr_accessor :guests, :id
 
   def initialize(id, host = nil)
@@ -58,30 +57,45 @@ class Room
     raise RoomFullError, "Talkroom ##{id} is full" if guests.length > 1
 
     guests << guest
-    notify
+    notify_new_guest
   end
 
   def other(guest)
-    return unless (index = guests.index(guest))
+    return unless full? && (index = guests.index(guest))
 
     guests[index - 1]
   end
 
-  def notify
-    PandaFrame::OutgoingText.new("ROOM #{id}").send guests.last
-    return unless guests.length == 2
+  def notify_new_guest
+    call "ROOM #{id}", guests[-1]
+    broker
+  end
 
-    # Notify both party of their names
-    PandaFrame::OutgoingText.new("PEER #{guests.last.name}").send guests.first
-    PandaFrame::OutgoingText.new("PEER #{guests.first.name}").send guests.last
+  # Make a phone call to the guests from the reception
+  def call(text, guest)
+    PandaFrame::OutgoingText.new(text).send guest
+  end
+
+  # Notify both party of their names
+  def broker
+    return unless guests[1]
+
+    call "PEER #{guests[1].name}", guests[0]
+    call "PEER #{guests[0].name}", guests[1]
   end
 
   def checkout(guest)
     return unless guests.delete guest
 
     logger.warn "Guest #{guest.name} left room ##{id}"
-    PandaFrame::OutgoingText.new("POUT #{guest.name}").send guest.roommate
+    call "POUT #{guest.name}", guests[-1]
   end
 
   alias add <<
+
+  private
+
+  def full?
+    !!guests[1]
+  end
 end

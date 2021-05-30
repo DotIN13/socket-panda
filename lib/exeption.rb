@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-require_relative 'panda_logger'
+require_relative 'panda_logging'
 
 # Error handling
 class PandaSocketError < StandardError
-  include PandaLogger
+  include PandaLogging
 
   def initialize(msg)
     logger.error msg.to_s

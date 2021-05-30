@@ -5,12 +5,12 @@ require 'socket'
 require_relative 'lib/hall'
 require_relative 'lib/frame'
 require_relative 'lib/exeption'
-require_relative 'lib/panda_logger'
+require_relative 'lib/panda_logging'
 require_relative 'lib/constant'
 
 # WSServer
 class Server
-  include PandaLogger
+  include PandaLogging
   attr_reader :server, :hall
 
   def initialize
@@ -36,7 +36,7 @@ end
 
 # Extend Ruby TCPSocket class
 class TCPSocket
-  include PandaLogger
+  include PandaLogging
   include PandaConstants
   attr_accessor :hall, :room, :handshake, :http_request, :opened
   attr_reader :msg_type, :name, :id
@@ -46,16 +46,16 @@ class TCPSocket
     super
     @opened = false
     checkout
-    logger.warn 'Socket closed'
+    logger.warn prepend_identity('Socket closed')
   end
 
   def signal_close
-    logger.warn 'Closing socket with closing frame'
+    logger.warn prepend_identity('Closing socket with closing frame')
     PandaFrame::Outgoing.new(fin: 1, opcode: 8, payload: 'CLOSE').send self
   rescue Errno::EPIPE
-    logger.warn 'Broken pipe, no closing frames sent'
+    logger.warn prepend_identity('Broken pipe, no closing frames sent')
   rescue IOError
-    logger.warn 'Closed stream, no closing frames sent'
+    logger.warn prepend_identity('Closed stream, no closing frames sent')
   end
 
   def shake
@@ -83,7 +83,7 @@ class TCPSocket
     # Close socket if closing frame received or an error occured
     close
   rescue IOError => e
-    logger.warn e.message.capitalize
+    logger.warn prepend_identity(e.message.capitalize)
   rescue SocketTimeout
     close
   end
@@ -136,7 +136,7 @@ class TCPSocket
   def recvmsg
     # New enumerator per message
     Enumerator.new do |buffer|
-      logger.info 'Listening for messages'
+      logger.info prepend_identity('Listening for messages')
       loop do
         # Get frames
         frame = PandaFrame::Incomming.new
@@ -148,7 +148,7 @@ class TCPSocket
         end
         break if frame.fin?
       end
-      logger.info 'Message end'
+      logger.info prepend_identity('Message end')
     end
   end
 
@@ -184,7 +184,7 @@ class TCPSocket
   end
 
   def pong
-    logger.info 'Responding ping with a pong'
+    logger.info prepend_identity('Responding ping with a pong')
     # Respond with text pong as javascript API does not support pong frame handling
     res = msg_type == :ping ? 0x0A : 0x01
     PandaFrame::Outgoing.new(fin: 1, opcode: res, payload: 'PONG').send self
@@ -200,7 +200,7 @@ class TCPSocket
     # Remove dead connection from previous room
     # hall.remove_ghost(id)
     # Join room only after name is received
-    logger.info "Checking in #{name} for the first time"
+    logger.info prepend_identity('Checking in for the first time')
     hall.checkin(self)
   end
 
@@ -208,7 +208,7 @@ class TCPSocket
     return unless roommate
 
     frame.send roommate
-    logger.info "Broadcasted frame to #{roommate.name}"
+    logger.info prepend_identity('Broadcasted frame to peer')
   end
 end
 
