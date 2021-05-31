@@ -73,6 +73,8 @@ class Room
 
   # Make a phone call to the guests from the reception
   def call(text, guest)
+    return logger.warn 'No guest available to call' unless guest
+
     PandaFrame::OutgoingText.new(text).send guest
   end
 

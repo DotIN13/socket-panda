@@ -33,7 +33,8 @@ module PandaFrame
     end
 
     def send(dest)
-      return logger.error('No destination sockets available') unless dest
+      # return logger.error('No destination sockets available') unless dest
+      raise StandardError, 'No destination sockets available' unless dest
 
       dest.write prepare
     end

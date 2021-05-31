@@ -27,7 +27,7 @@ class Server
         logger.info 'Incomming request'
         if socket.shake
           socket.hall = hall
-          socket.hold
+          socket.listen_for_msg
         end
       end
     end
@@ -38,24 +38,15 @@ end
 class TCPSocket
   include PandaLogging
   include PandaConstants
-  attr_accessor :hall, :room, :handshake, :http_request, :opened
-  attr_reader :msg_type, :name, :id
+  attr_accessor :hall, :room, :handshake, :http_request, :msg_type, :opened
+  attr_reader :name, :id
 
   def close
     signal_close
     super
     @opened = false
     checkout
-    logger.warn prepend_identity('Socket closed')
-  end
-
-  def signal_close
-    logger.warn prepend_identity('Closing socket with closing frame')
-    PandaFrame::Outgoing.new(fin: 1, opcode: 8, payload: 'CLOSE').send self
-  rescue Errno::EPIPE
-    logger.warn prepend_identity('Broken pipe, no closing frames sent')
-  rescue IOError
-    logger.warn prepend_identity('Closed stream, no closing frames sent')
+    logger.warn(logging_prefix) { 'Socket closed' }
   end
 
   def shake
@@ -66,7 +57,7 @@ class TCPSocket
       return close
     end
 
-    logger.info "Handshake valid, responding with #{handshake}"
+    logger.info(logging_prefix) { "Handshake valid, responding with #{handshake}" }
     puts handshake.to_s
     @opened = true
   end
@@ -78,13 +69,13 @@ class TCPSocket
     yield ready.first.first
   end
 
-  def hold
-    recvframe
+  def listen_for_msg
+    recvmsg
     # Close socket if closing frame received or an error occured
     close
   rescue IOError => e
-    logger.warn prepend_identity(e.message.capitalize)
-  rescue SocketTimeout
+    logger.warn(logging_prefix) { e.message.capitalize }
+  rescue SocketTimeout, FrameError
     close
   end
 
@@ -114,7 +105,7 @@ class TCPSocket
     end
     raise HandshakeError, 'Invalid websocket request' unless http_request.downcase.include? 'upgrade: websocket'
 
-    logger.info "Received HTTP request: #{http_request}"
+    logger.info(logging_prefix) { "Received HTTP request: #{http_request}" }
   end
 
   def create_handshake
@@ -123,45 +114,58 @@ class TCPSocket
     handshake.valid?
   end
 
-  def recvframe
+  # Main receiving method
+  def recvmsg
     while opened
-      @data = ''
-      recvmsg.lazy.each_with_index { |frame, index| handle_frame(frame, index) }
+      @data = String.new
+      # Receive the rest if not finished
+      recv_the_rest unless recv_first_frame
       execute_commands
     end
   end
 
-  # Receive full message
-  # Until finish
-  def recvmsg
-    # New enumerator per message
-    Enumerator.new do |buffer|
-      logger.info prepend_identity('Listening for messages')
-      loop do
-        # Get frames
-        frame = PandaFrame::Incomming.new
-        frame.socket = self
-        begin
-          buffer << frame.receive
-        rescue FrameError
-          break close
-        end
-        break if frame.fin?
-      end
-      logger.info prepend_identity('Message end')
-    end
+  # Receive the first frame to decide if following frames should be stored
+  # Return true if finished
+  def recv_first_frame
+    logger.info(logging_prefix) { 'Listening for first frame' }
+    handle_first_frame recvframe
   end
 
-  def handle_frame(frame, index)
-    if index.zero?
-      self.msg_type = frame.type
-      # PEND filename if binary
-      broadcast_frame PandaFrame::OutgoingText.new("PEND #{frame.filename}") if msg_type == :binary
+  # Set msg_type on receiving first frame
+  # To decide how following frames should be processed
+  def handle_first_frame(frame)
+    self.msg_type = frame.type
+    logger.info(logging_prefix) { "Received #{msg_type} frame" }
+    # PEND filename if binary, assuming all binary frames were parts of a file
+    broadcast_frame PandaFrame::OutgoingText.new("PEND #{frame.filename}") if msg_type == :binary
+    # Also handle the first frame as a general frame
+    handle_frame frame
+  end
+
+  # Receive a single frame
+  def recvframe
+    frame = PandaFrame::Incomming.new self
+    # If FrameError is raised, rescue in #hold and close the connection
+    frame.receive
+  end
+
+  # Receive full messages
+  # Until finish
+  def recv_the_rest
+    logger.info(logging_prefix) { 'Receiving remaining frames for the current message' }
+    loop do
+      break if handle_frame recvframe
     end
-    # Concat payload if frame is text and starts with commands
-    @data += frame.payload if COMMANDS.include? msg_type
+    logger.info(logging_prefix) { 'Message end' }
+  end
+
+  # Return true if message is finished
+  def handle_frame(frame)
+    # Concat payload only if frame is text and starts with commands
+    @data << frame.payload if COMMANDS.include? msg_type
     # Directly forward frames nonetheless
     broadcast_frame(frame) unless %i[ROOM PING NAME ping close].include? msg_type
+    frame.fin?
   end
 
   # Command detection and distribution
@@ -178,13 +182,8 @@ class TCPSocket
     end
   end
 
-  def msg_type=(type)
-    @msg_type = type
-    logger.info "Received #{msg_type} frame"
-  end
-
   def pong
-    logger.info prepend_identity('Responding ping with a pong')
+    logger.info(logging_prefix) { 'Responding ping with a pong' }
     # Respond with text pong as javascript API does not support pong frame handling
     res = msg_type == :ping ? 0x0A : 0x01
     PandaFrame::Outgoing.new(fin: 1, opcode: res, payload: 'PONG').send self
@@ -200,7 +199,7 @@ class TCPSocket
     # Remove dead connection from previous room
     # hall.remove_ghost(id)
     # Join room only after name is received
-    logger.info prepend_identity('Checking in for the first time')
+    logger.info(logging_prefix) { 'Checking in for the first time' }
     hall.checkin(self)
   end
 
@@ -208,7 +207,16 @@ class TCPSocket
     return unless roommate
 
     frame.send roommate
-    logger.info prepend_identity('Broadcasted frame to peer')
+    logger.info(logging_prefix) { 'Broadcasted frame to peer' }
+  end
+
+  def signal_close
+    logger.warn(logging_prefix) { 'Closing socket with closing frame' }
+    PandaFrame::Outgoing.new(fin: 1, opcode: 8, payload: 'CLOSE').send self
+  rescue Errno::EPIPE
+    logger.warn(logging_prefix) { 'Broken pipe, no closing frames sent' }
+  rescue IOError
+    logger.warn(logging_prefix) { 'Closed stream, no closing frames sent' }
   end
 end
 

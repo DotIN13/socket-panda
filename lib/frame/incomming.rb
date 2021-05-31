@@ -6,6 +6,11 @@ module PandaFrame
   class Incomming < Common
     attr_accessor :socket
 
+    def initialize(socket)
+      super()
+      self.socket = socket
+    end
+
     # Incoming frames
     def receive
       parse_info
@@ -25,8 +30,6 @@ module PandaFrame
 
     def recv_first_byte
       first = socket.getbyte
-      raise SocketTimeout, 'Socket not responsive' unless first
-
       self.fin = first[7]
       self.opcode = first[0..3]
     end
@@ -61,7 +64,7 @@ module PandaFrame
 
     def gather_payload
       self.payload = socket.read_on_ready { |conn| conn.read(payload_size) }.unpack('C*')
-      logger.info "Received raw payload #{payload.first(20)}..."
+      logger.info "Received raw payload #{payload.first(10)}..."
     end
 
     # Record @unmasked state to avoid unmasking multiple times
@@ -69,7 +72,7 @@ module PandaFrame
       return payload unless is_masked && !@unmasked
 
       payload.each_with_index { |byte, i| payload[i] = byte ^ mask[i % 4] }
-      logger.info "Unmasked payload #{payload.first(20)}..."
+      logger.info "Unmasked payload #{payload.first(10)}..."
       @unmasked = true
       self.payload = payload.pack('C*')
     end
