@@ -13,3 +13,5 @@ end
 gem 'websocket', '~> 1.2'
 
 gem "memory_profiler", "~> 1.0"
+
+gem "os", "~> 1.1"

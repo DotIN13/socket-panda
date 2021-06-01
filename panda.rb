@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'os'
 require 'websocket'
 require 'socket'
 require_relative 'lib/hall'
@@ -38,7 +39,7 @@ end
 class TCPSocket
   include PandaLogging
   include PandaConstants
-  attr_accessor :hall, :room, :handshake, :http_request, :msg_type, :opened
+  attr_accessor :hall, :room, :handshake, :http_request, :msg_type, :opened, :busy_from
   attr_reader :name, :id
 
   def close
@@ -79,15 +80,25 @@ class TCPSocket
     close
   end
 
+  def queue(msg)
+    message_queue << msg
+  end
+
+  def unload_queue
+    return if message_queue.empty?
+
+    message_queue.shift.deliver self
+  end
+
   # Talkroom methods
   def checkout
     # Checkout from previous room
-    room&.checkout(self)
+    room&.checkout self
     self.room = nil
   end
 
   def roommate
-    room&.other(self)
+    room&.other self
   end
 
   private
@@ -160,11 +171,13 @@ class TCPSocket
   end
 
   # Return true if message is finished
+  # #handle_frame is called after every received frame
   def handle_frame(frame)
     # Concat payload only if frame is text and starts with commands
     @data << frame.payload if COMMANDS.include? msg_type
     # Directly forward frames nonetheless
     broadcast_frame(frame) unless %i[ROOM PING NAME ping close].include? msg_type
+    logger.debug "#{OS.rss_bytes / 1000} mb"
     frame.fin?
   end
 
@@ -186,11 +199,11 @@ class TCPSocket
     logger.info(logging_prefix) { 'Responding ping with a pong' }
     # Respond with text pong as javascript API does not support pong frame handling
     res = msg_type == :ping ? 0x0A : 0x01
-    PandaFrame::Outgoing.new(fin: 1, opcode: res, payload: 'PONG').send self
+    PandaFrame::Outgoing.new(fin: 1, opcode: res, payload: 'PONG').deliver self
   end
 
   def change_room
-    hall.checkin(self, @data[5..])
+    hall.checkin self, @data[5..]
   end
 
   def handle_name
@@ -200,19 +213,24 @@ class TCPSocket
     # hall.remove_ghost(id)
     # Join room only after name is received
     logger.info(logging_prefix) { 'Checking in for the first time' }
-    hall.checkin(self)
+    hall.checkin self
   end
 
   def broadcast_frame(frame)
     return unless roommate
 
-    frame.send roommate
-    logger.info(logging_prefix) { 'Broadcasted frame to peer' }
+    logger.info(logging_prefix) { 'Attempting to broadcast frame' }
+    frame.deliver roommate
+  end
+
+  # Queue method
+  def message_queue
+    @message_queue ||= []
   end
 
   def signal_close
     logger.warn(logging_prefix) { 'Closing socket with closing frame' }
-    PandaFrame::Outgoing.new(fin: 1, opcode: 8, payload: 'CLOSE').send self
+    PandaFrame::Outgoing.new(fin: 1, opcode: 8, payload: 'CLOSE').deliver self
   rescue Errno::EPIPE
     logger.warn(logging_prefix) { 'Broken pipe, no closing frames sent' }
   rescue IOError

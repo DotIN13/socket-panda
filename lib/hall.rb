@@ -75,7 +75,7 @@ class Room
   def call(text, guest)
     return logger.warn 'No guest available to call' unless guest
 
-    PandaFrame::OutgoingText.new(text).send guest
+    PandaFrame::OutgoingText.new(text).deliver guest
   end
 
   # Notify both party of their names

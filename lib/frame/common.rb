@@ -32,11 +32,34 @@ module PandaFrame
       end
     end
 
-    def send(dest)
-      # return logger.error('No destination sockets available') unless dest
-      raise StandardError, 'No destination sockets available' unless dest
+    def deliver(dest)
+      return logger.error('No destination sockets available') unless dest&.opened
 
+      # Send frame if target socket is not busy
+      # or is busy from the same message source.
+      # Queue frame if otherwise
+      if dest.busy_from == source || !dest.busy_from
+        send_frame(dest)
+      else
+        queue_frame
+      end
+    end
+
+    def send_frame(dest)
       dest.write prepare
+      logger.info 'Sent frame'
+      # Set #busy_from only when socket is not busy
+      # or when busy from the same message source
+      # to make sure message from other source
+      # do not mess with busy_from
+      dest.busy_from = fin? ? nil : source
+      # Unload queued message one by one instead of all at once
+      dest.unload_queue if fin?
+    end
+
+    def queue_frame
+      dest.queue(self)
+      logger.info 'Target socket is blocked, queued frame'
     end
 
     def ping?
@@ -75,6 +98,12 @@ module PandaFrame
       return :binary if binary?
       return :close if close?
       return :ping if ping?
+    end
+
+    def source
+      return :forwarded if instance_of? PandaFrame::Incomming
+
+      :outgoing
     end
   end
 end

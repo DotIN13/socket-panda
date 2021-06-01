@@ -2,4 +2,5 @@
 
 module PandaConstants
   COMMANDS = %i[ROOM CLIP NAME PING].freeze
+  LOG = 'panda.log'
 end

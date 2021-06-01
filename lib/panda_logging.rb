@@ -1,9 +1,12 @@
 # frozen_string_literal: true
 
 require 'logger'
+require_relative 'constant'
 
 # Global Logging
 module PandaLogging
+  include PandaConstants
+
   def logger
     PandaLogging.logger
   end
@@ -20,6 +23,7 @@ module PandaLogging
     end
 
     def new_logger
+      File.delete('panda.log') if File.exist?('panda.log')
       logdev = production? ? $stderr : 'panda.log'
       level = production? ? Logger::WARN : Logger::DEBUG
       @logger = Logger.new logdev, progname: 'Socket Panda', level: level

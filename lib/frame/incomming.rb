@@ -67,7 +67,7 @@ module PandaFrame
       logger.info "Received raw payload #{payload.first(10)}..."
     end
 
-    # Record @unmasked state to avoid unmasking multiple times
+    # Record #unmasked state to avoid unmasking multiple times
     def unmask
       return payload unless is_masked && !@unmasked
 
