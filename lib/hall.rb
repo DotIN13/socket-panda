@@ -2,7 +2,7 @@
 
 require 'securerandom'
 require_relative 'exeption'
-require_relative 'panda_logging'
+require_relative 'logging'
 require_relative 'frame'
 
 # Talkroom

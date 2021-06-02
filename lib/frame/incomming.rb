@@ -16,8 +16,7 @@ module PandaFrame
       parse_info
       parse_size
       parse_mask
-      gather_payload
-      unmask
+      recv_payload
       self
     end
 
@@ -58,22 +57,25 @@ module PandaFrame
       return unless is_masked
 
       # Do not include mask in bytes
-      @mask = 4.times.map { socket.read_on_ready(&:getbyte) }
-      logger.info "Parsed mask #{mask}"
+      @mask = socket.read(4)
+      @mask32 = mask.unpack('C*')
+      @mask64 = (mask * 2).unpack1('Q')
+      logger.info 'Parsed mask'
     end
 
-    def gather_payload
-      self.payload = socket.read_on_ready { |conn| conn.read(payload_size) }.unpack('C*')
-      logger.info "Received raw payload #{payload.first(10)}..."
+    def recv_payload
+      if is_masked
+        self.payload = socket.read(payload_size).unpack('C*')
+        unmask
+      else
+        self.payload = socket.read(payload_size)
+      end
     end
 
     # Record #unmasked state to avoid unmasking multiple times
     def unmask
-      return payload unless is_masked && !@unmasked
-
-      payload.each_with_index { |byte, i| payload[i] = byte ^ mask[i % 4] }
+      payload.each_index { |i| payload[i] ^= @mask32[i % 4] }
       logger.info "Unmasked payload #{payload.first(10)}..."
-      @unmasked = true
       self.payload = payload.pack('C*')
     end
 

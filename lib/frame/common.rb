@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-require_relative '../panda_logging'
+require_relative '../logging'
 require_relative '../exeption'
-require_relative '../constant'
+require_relative '../constants'
 
 # General namespace for WebSocket frames
 module PandaFrame
@@ -39,15 +39,16 @@ module PandaFrame
       # or is busy from the same message source.
       # Queue frame if otherwise
       if dest.busy_from == source || !dest.busy_from
-        send_frame(dest)
+        send_frame dest
       else
-        queue_frame
+        queue_frame dest
       end
     end
 
     def send_frame(dest)
       dest.write prepare
       logger.info 'Sent frame'
+      self.payload = nil
       # Set #busy_from only when socket is not busy
       # or when busy from the same message source
       # to make sure message from other source
@@ -57,8 +58,8 @@ module PandaFrame
       dest.unload_queue if fin?
     end
 
-    def queue_frame
-      dest.queue(self)
+    def queue_frame(dest)
+      dest.queue self
       logger.info 'Target socket is blocked, queued frame'
     end
 

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative 'panda_logging'
+require_relative 'logging'
 
 # Error handling
 class PandaSocketError < StandardError

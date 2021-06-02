@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'logger'
-require_relative 'constant'
+require_relative 'constants'
 
 # Global Logging
 module PandaLogging

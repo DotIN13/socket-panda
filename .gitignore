@@ -4,4 +4,4 @@ vendor
 
 # Memory profiler
 memory.txt
-panda.log
+*.log
