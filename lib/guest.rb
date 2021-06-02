@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require 'os'
 require 'websocket'
 require 'socket'
 require_relative 'frame'
@@ -150,7 +149,6 @@ class TCPSocket
     @data << frame.payload if COMMANDS.include? msg_type
     # Directly forward frames nonetheless
     broadcast_frame(frame) unless %i[ROOM PING NAME ping close].include? msg_type
-    logger.debug "#{OS.rss_bytes / 1000} mb"
     frame.fin?
   end
 

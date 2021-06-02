@@ -1,9 +1,11 @@
 # frozen_string_literal: true
 
 require_relative 'common'
+require_relative '../constants'
 
 module PandaFrame
   class Incomming < Common
+    include PandaConstants
     attr_accessor :socket
 
     def initialize(socket)
@@ -65,18 +67,24 @@ module PandaFrame
 
     def recv_payload
       if is_masked
-        self.payload = socket.read(payload_size).unpack('C*')
-        unmask
+        self.payload = String.new
+        tail = payload_size % FRAGMENT
+        (payload_size / FRAGMENT).times do
+          unmask socket.read(FRAGMENT)
+        end
+        unmask socket.read(tail)
       else
         self.payload = socket.read(payload_size)
       end
     end
 
     # Record #unmasked state to avoid unmasking multiple times
-    def unmask
-      payload.each_index { |i| payload[i] ^= @mask32[i % 4] }
-      logger.info "Unmasked payload #{payload.first(10)}..."
-      self.payload = payload.pack('C*')
+    def unmask(raw)
+      size = raw.bytesize
+      padding = 0.chr * (8 - size % 8)
+      raw = (raw + padding).unpack('Q*')
+      raw.each_index { |i| raw[i] ^= @mask64 }
+      payload << raw.pack('Q*')[0..size - 1]
     end
 
     # Assuming the first byte comtains the byte length for filename
