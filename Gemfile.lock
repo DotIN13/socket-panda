@@ -4,12 +4,14 @@ GEM
     airbrussh (1.4.0)
       sshkit (>= 1.6.1, != 1.7.0)
     ast (2.4.2)
+    bcrypt_pbkdf (1.1.0)
     capistrano (3.16.0)
       airbrussh (>= 1.0.0)
       i18n
       rake (>= 10.0.0)
       sshkit (>= 1.9.0)
     concurrent-ruby (1.1.8)
+    ed25519 (1.2.4)
     i18n (1.8.10)
       concurrent-ruby (~> 1.0)
     net-scp (3.0.0)
@@ -44,7 +46,9 @@ PLATFORMS
   arm64-darwin-20
 
 DEPENDENCIES
+  bcrypt_pbkdf (>= 1.0, < 2.0)
   capistrano
+  ed25519 (>= 1.2, < 2.0)
   rubocop
   websocket (~> 1.2)
 

@@ -4,9 +4,9 @@ After=network.target network-online.target
 Requires=network-online.target
 
 [Service]
-User=xray
-Group=xray
-ExecStart=ruby /var/lib/xray/socket-panda/panda.rb
+User=ruby
+Group=ruby
+ExecStart=/var/lib/ruby/.rbenv/shims/ruby /var/www/socket-panda/panda.rb
 TimeoutStopSec=5s
 LimitNOFILE=1048576
 LimitNPROC=512
