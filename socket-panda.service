@@ -6,7 +6,7 @@ Requires=network-online.target
 [Service]
 User=ruby
 Group=ruby
-ExecStart=/var/lib/ruby/.rbenv/shims/ruby /var/www/socket-panda/panda.rb
+ExecStart=/var/lib/ruby/.rbenv/shims/ruby /var/www/socket-panda/current/panda.rb
 TimeoutStopSec=5s
 LimitNOFILE=1048576
 LimitNPROC=512
