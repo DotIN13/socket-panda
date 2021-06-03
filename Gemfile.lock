@@ -10,6 +10,8 @@ GEM
       i18n
       rake (>= 10.0.0)
       sshkit (>= 1.9.0)
+    capistrano-bundler (2.0.1)
+      capistrano (~> 3.1)
     concurrent-ruby (1.1.8)
     ed25519 (1.2.4)
     i18n (1.8.10)
@@ -44,10 +46,12 @@ GEM
 
 PLATFORMS
   arm64-darwin-20
+  x86_64-linux
 
 DEPENDENCIES
   bcrypt_pbkdf (>= 1.0, < 2.0)
   capistrano
+  capistrano-bundler (~> 2.0)
   ed25519 (>= 1.2, < 2.0)
   rubocop
   websocket (~> 1.2)
