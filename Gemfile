@@ -15,3 +15,7 @@ group :development do
 end
 
 gem 'websocket', '~> 1.2'
+
+gem "timers", "~> 4.3"
+
+gem "async", "~> 1.29"

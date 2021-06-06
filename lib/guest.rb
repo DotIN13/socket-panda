@@ -39,7 +39,7 @@ class TCPSocket
     ready = IO.select [self], nil, nil, timeout
     raise SocketTimeout, 'Socket read timeout' unless ready
 
-    yield ready.first.first
+    yield self
   end
 
   def listen_for_msg

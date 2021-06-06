@@ -23,28 +23,30 @@ module PandaFrame
     end
 
     def parse_info
-      recv_first_byte
+      first = recv_first_byte
+      self.fin = first[7]
+      self.opcode = first[0..3]
       logger.info "Reveived frame with opcode #{opcode} and fin #{fin}"
-      logger.warn 'Received closing frame' if opcode == 0x08
       raise FrameError, 'Opcode unsupported' unless [0x00, 0x01, 0x02, 0x08].include? opcode
     end
 
     def recv_first_byte
-      first = socket.getbyte
-      self.fin = first[7]
-      self.opcode = first[0..3]
+      ready = IO.select [socket], nil, nil, 20
+      return socket.getbyte if ready
+
+      raise SocketTimeout, 'No incomming messages in 20 seconds, socket dead'
     end
 
     def parse_size
       # Read the next bytes containing mask option and initial payload length
       second = socket.getbyte
       self.is_masked = second & 0b10000000
-      logger.info 'Payload is masked' if is_masked
+      logger.debug 'Payload is masked' if is_masked
       self.initial_size = second & 0b01111111
-      logger.info "Initial payload size #{initial_size}"
+      logger.debug "Initial payload size #{initial_size}"
       # Handle extended payload length
       measure_payload
-      logger.info "Received frame of size #{payload_size}"
+      logger.debug "Received frame of size #{payload_size}"
     end
 
     def measure_payload
@@ -62,24 +64,26 @@ module PandaFrame
       @mask = socket.read(4)
       @mask32 = mask.unpack('C*')
       @mask64 = (mask * 2).unpack1('Q')
-      logger.info 'Parsed mask'
+      logger.debug 'Parsed frame mask'
     end
 
     def recv_payload
       if is_masked
-        self.payload = String.new
-        tail = payload_size % FRAGMENT
-        (payload_size / FRAGMENT).times do
-          unmask socket.read(FRAGMENT)
-        end
-        unmask socket.read(tail)
+        recv_and_unmask
       else
         self.payload = socket.read(payload_size)
       end
     end
 
+    def recv_and_unmask
+      self.payload = String.new
+      tail = payload_size % FRAGMENT
+      (payload_size / FRAGMENT).times { xor socket.read(FRAGMENT) }
+      xor socket.read(tail)
+    end
+
     # Record #unmasked state to avoid unmasking multiple times
-    def unmask(raw)
+    def xor(raw)
       size = raw.bytesize
       padding = 0.chr * (8 - size % 8)
       raw = (raw + padding).unpack('Q*')

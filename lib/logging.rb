@@ -33,7 +33,8 @@ module PandaLogging
 
     def new_logger
       File.delete('panda.log') if File.exist?('panda.log')
-      logdev = production? ? $stderr : 'panda.log'
+      # logdev = production? ? $stderr : 'panda.log'
+      logdev = $stderr
       level = production? ? Logger::WARN : Logger::DEBUG
       @logger = Logger.new logdev, progname: 'Socket Panda', level: level
     end
