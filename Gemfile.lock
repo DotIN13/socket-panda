@@ -4,10 +4,6 @@ GEM
     airbrussh (1.4.0)
       sshkit (>= 1.6.1, != 1.7.0)
     ast (2.4.2)
-    async (1.29.0)
-      console (~> 1.10)
-      nio4r (~> 2.3)
-      timers (~> 4.1)
     bcrypt_pbkdf (1.1.0)
     capistrano (3.16.0)
       airbrussh (>= 1.0.0)
@@ -17,16 +13,12 @@ GEM
     capistrano-bundler (2.0.1)
       capistrano (~> 3.1)
     concurrent-ruby (1.1.9)
-    console (1.12.0)
-      fiber-local
     ed25519 (1.2.4)
-    fiber-local (1.0.0)
     i18n (1.8.10)
       concurrent-ruby (~> 1.0)
     net-scp (3.0.0)
       net-ssh (>= 2.6.5, < 7.0.0)
     net-ssh (6.1.0)
-    nio4r (2.5.7)
     parallel (1.20.1)
     parser (3.0.1.1)
       ast (~> 2.4.1)
@@ -49,22 +41,20 @@ GEM
     sshkit (1.21.2)
       net-scp (>= 1.1.2)
       net-ssh (>= 2.8.0)
-    timers (4.3.3)
     unicode-display_width (2.0.0)
     websocket (1.2.9)
 
 PLATFORMS
   arm64-darwin-20
+  armv7l-linux-eabihf
   x86_64-linux
 
 DEPENDENCIES
-  async (~> 1.29)
   bcrypt_pbkdf (>= 1.0, < 2.0)
   capistrano
   capistrano-bundler (~> 2.0)
   ed25519 (>= 1.2, < 2.0)
   rubocop
-  timers (~> 4.3)
   websocket (~> 1.2)
 
 BUNDLED WITH
