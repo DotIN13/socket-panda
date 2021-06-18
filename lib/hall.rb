@@ -30,7 +30,9 @@ class Hall
       retry
     end
     guest.room = rooms[number]
-    logger.info "#{guest.name || 'Guest'} joined room ##{number} with #{guest.roommate&.name || 'himself'}"
+    name = guest.roommate&.name
+    name ||= 'alone'
+    logger.info "#{guest.name || 'Guest'} joined room ##{number} #{name}"
   end
 
   def new_room_number

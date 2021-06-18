@@ -24,29 +24,29 @@ module PandaFrame
 
     def parse_info
       first = recv_first_byte
+      raise FrameError, 'Received nil when reading, the socket might have already been closed' if first.nil?
+
       self.fin = first[7]
       self.opcode = first[0..3]
-      logger.info "Reveived frame with opcode #{opcode} and fin #{fin}"
       raise FrameError, 'Opcode unsupported' unless [0x00, 0x01, 0x02, 0x08].include? opcode
     end
 
+    # Attempt to fix an error in `parse_info': undefined method `[]' for nil:NilClass (NoMethodError) after idling
     def recv_first_byte
       ready = IO.select [socket], nil, nil, 20
-      return socket.getbyte if ready
+      raise SocketTimeout, 'No incomming messages in 20 seconds, socket dead' unless ready
 
-      raise SocketTimeout, 'No incomming messages in 20 seconds, socket dead'
+      socket.getbyte
     end
 
     def parse_size
       # Read the next bytes containing mask option and initial payload length
       second = socket.getbyte
       self.is_masked = second & 0b10000000
-      logger.debug 'Payload is masked' if is_masked
       self.initial_size = second & 0b01111111
-      logger.debug "Initial payload size #{initial_size}"
       # Handle extended payload length
       measure_payload
-      logger.debug "Received frame of size #{payload_size}"
+      logger.debug "Receiving frame: opcode #{opcode}, fin #{fin}, size #{payload_size}"
     end
 
     def measure_payload
@@ -62,9 +62,8 @@ module PandaFrame
 
       # Do not include mask in bytes
       @mask = socket.read(4)
-      @mask32 = mask.unpack('C*')
+      # @mask32 = mask.unpack('C*')
       @mask64 = (mask * 2).unpack1('Q')
-      logger.debug 'Parsed frame mask'
     end
 
     def recv_payload

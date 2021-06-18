@@ -11,7 +11,7 @@ require_relative 'constants'
 class TCPSocket
   include PandaLogging
   include PandaConstants
-  attr_accessor :hall, :room, :handshake, :http_request, :msg_type, :opened, :busy_from
+  attr_accessor :hall, :room, :handshake, :http_request, :opened, :msg_type, :busy_from
   attr_reader :name, :id
 
   def close
@@ -31,7 +31,7 @@ class TCPSocket
     end
 
     logger.info(logging_prefix) { "Handshake valid, responding with #{handshake}" }
-    puts handshake.to_s
+    write handshake.to_s
     @opened = true
   end
 
