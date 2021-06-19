@@ -13,8 +13,8 @@ class SocketPanda
 
     def initialize(socket)
       self.socket = socket
-      self.request = Struct.new('Headers', :http_method, :http_version, :Origin, :Upgrade, :Connection,
-                                :"Sec-WebSocket-Key", :"Sec-WebSocket-Version").new
+      self.request = Struct.new('Headers', :http_method, :http_version, :origin, :upgrade, :connection,
+                                :"sec-websocket-key", :"sec-websocket-version").new
       read_http_request
       respond
     end
@@ -25,7 +25,7 @@ class SocketPanda
       # For HTTP request must end with "\r\n"
       read_first_line
       read_headers
-      logger.info "Received valid WebSocket request #{request}"
+      logger.info "Received WebSocket request #{request}"
       raise HandshakeError, 'Invalid HTTP request type' unless valid_type?
       raise HandshakeError, 'Invalid WebSocket request' unless valid_headers?
     end
@@ -56,7 +56,7 @@ class SocketPanda
     def read_headers
       until (line = on_socket_ready.gets) == "\r\n"
         pair = line.split(': ', 2)
-        request[pair.first] = pair.last.chomp
+        request[pair.first.downcase] = pair.last.chomp
       end
     rescue NameError
       retry
@@ -64,10 +64,10 @@ class SocketPanda
 
     def valid_headers?
       valid = []
-      valid << (ORIGINS.include? request[:Origin])
-      valid << (request[:Upgrade] == 'websocket')
-      valid << (request[:Connection] == 'Upgrade')
-      valid << (request[:'Sec-WebSocket-Version'] == '13')
+      valid << (ORIGINS.include? request[:origin])
+      valid << (request[:upgrade] == 'websocket')
+      valid << (request[:connection] == 'Upgrade')
+      valid << (request[:'sec-websocket-version'] == '13')
       valid.all? true
     end
 
@@ -81,14 +81,14 @@ class SocketPanda
 
     # Generate response
     def respond
-      response_key = Digest::SHA1.base64digest [request[:'Sec-WebSocket-Key'],
+      response_key = Digest::SHA1.base64digest [request[:'sec-websocket-key'],
                                                 '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'].join
       logger.debug "Responding with WebSocket key #{response_key}"
       socket.write <<~ENDOFSTRING
-        HTTP/#{http_version} 101 Switching Protocols
-        Upgrade: websocket
-        Connection: Upgrade
-        Sec-WebSocket-Accept: #{response_key}\r\n
+        HTTP/#{request[:http_version]} 101 Switching Protocols
+        upgrade: websocket
+        connection: Upgrade
+        sec-websocket-accept: #{response_key}\r\n
       ENDOFSTRING
     end
   end
