@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require 'websocket'
 require 'socket'
+require_relative 'handshake'
 require_relative 'frame'
 require_relative 'exeption'
 require_relative 'logging'
@@ -23,23 +23,10 @@ class TCPSocket
   end
 
   def shake
-    begin
-      parse_http_request
-      raise HandshakeError, 'Handshake invalid, closing socket' unless create_handshake
-    rescue HandshakeError
-      return close
-    end
-
-    logger.info(logging_prefix) { "Handshake valid, responding with #{handshake}" }
-    write handshake.to_s
+    SocketPanda::Handshake.new self
     @opened = true
-  end
-
-  def read_on_ready(timeout = 3)
-    ready = IO.select [self], nil, nil, timeout
-    raise SocketTimeout, 'Socket read timeout' unless ready
-
-    yield self
+  rescue HandshakeError
+    close
   end
 
   def listen_for_msg
@@ -74,28 +61,6 @@ class TCPSocket
   end
 
   private
-
-  def parse_http_request
-    self.http_request = ''
-    # Always get line before breaking from loop
-    # For HTTP request must end with "\r\n"
-    loop do
-      line = read_on_ready(&:gets)
-      return false unless line
-
-      self.http_request += line
-      break if line == "\r\n"
-    end
-    raise HandshakeError, 'Invalid websocket request' unless http_request.downcase.include? 'upgrade: websocket'
-
-    logger.info(logging_prefix) { "Received HTTP request: #{http_request}" }
-  end
-
-  def create_handshake
-    self.handshake = WebSocket::Handshake::Server.new(secure: true)
-    handshake << http_request
-    handshake.valid?
-  end
 
   # Main receiving method
   def recvmsg

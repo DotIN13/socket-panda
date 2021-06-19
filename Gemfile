@@ -4,8 +4,6 @@ source 'https://rubygems.org'
 
 git_source(:github) { |repo_name| "https://github.com/#{repo_name}" }
 
-# gem "rails"
-
 group :development do
   gem 'bcrypt_pbkdf', '>= 1.0', '< 2.0'
   gem 'capistrano', require: false
@@ -13,5 +11,3 @@ group :development do
   gem 'ed25519', '>= 1.2', '< 2.0'
   gem 'rubocop'
 end
-
-gem 'websocket', '~> 1.2'
