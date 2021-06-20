@@ -101,9 +101,7 @@ class TCPSocket
   # Until finish
   def recv_the_rest
     logger.info(logging_prefix) { 'Receiving remaining frames for the current message' }
-    loop do
-      break if handle_frame recvframe
-    end
+    frame = recvframe until handle_frame(frame)
     logger.info(logging_prefix) { 'Message end' }
   end
 
