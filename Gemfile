@@ -11,3 +11,6 @@ group :development do
   gem 'ed25519', '>= 1.2', '< 2.0'
   gem 'rubocop'
 end
+
+
+gem "evt", "~> 0.4.0"

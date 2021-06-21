@@ -34,7 +34,7 @@ class SocketPanda
 
     # Read and validate first line of HTTP request
     def read_first_line
-      first_line = on_socket_ready.gets
+      first_line = on_socket_readable.gets
       request[:http_method] = first_line.split(' ', 2)[0]
       request[:http_version] = first_line.match(%r{HTTP/(\d+\.?\d*)})[1]
     end
@@ -54,7 +54,7 @@ class SocketPanda
 
     # Read and validate headers
     def read_headers
-      until (line = on_socket_ready.gets) == "\r\n"
+      until (line = on_socket_readable.gets) == "\r\n"
         pair = line.split(': ', 2)
         request[pair.first.downcase] = pair.last.chomp
       end
@@ -72,8 +72,8 @@ class SocketPanda
     end
 
     # Socket methods
-    def on_socket_ready(timeout = 3)
-      ready = IO.select [socket], nil, nil, timeout
+    def on_socket_readable(timeout = 3)
+      ready = socket.wait timeout
       raise SocketTimeout, 'Socket read timeout' unless ready
 
       socket

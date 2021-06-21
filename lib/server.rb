@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'socket'
+require 'evt'
 require_relative 'hall'
 require_relative 'guest'
 
@@ -10,7 +11,8 @@ class PandaServer
   attr_reader :server, :hall
 
   def initialize
-    # trap_int
+    trap_int
+    Fiber.set_scheduler Evt::Scheduler.new
     @server = TCPServer.new 5613
     @hall = Hall.new
     start
@@ -26,12 +28,15 @@ class PandaServer
   # WIP: Should close socket if not ws connection
   def start
     logger.info 'Server is running'
-    loop do
-      Thread.start(server.accept) do |socket|
+    Fiber.schedule do
+      loop do
+        socket = server.accept
         logger.info 'Incomming request'
-        if socket.shake
-          socket.hall = hall
-          socket.listen_for_msg
+        Fiber.schedule do
+          if socket.shake
+            socket.hall = hall
+            socket.listen_for_msg
+          end
         end
       end
     end

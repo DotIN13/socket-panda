@@ -33,7 +33,7 @@ module PandaFrame
 
     # Attempt to fix an error in `parse_info': undefined method `[]' for nil:NilClass (NoMethodError) after idling
     def recv_first_byte
-      ready = IO.select [socket], nil, nil, 20
+      ready = socket.wait 20
       raise SocketTimeout, 'No incomming messages in 20 seconds, socket dead' unless ready
 
       socket.getbyte
