@@ -101,7 +101,10 @@ class TCPSocket
   # Until finish
   def recv_the_rest
     logger.info(logging_prefix) { 'Receiving remaining frames for the current message' }
-    frame = recvframe until handle_frame(frame)
+    loop do
+      frame = recvframe
+      break if handle_frame(frame)
+    end
     logger.info(logging_prefix) { 'Message end' }
   end
 
@@ -153,7 +156,7 @@ class TCPSocket
   def broadcast_frame(frame)
     return unless roommate
 
-    logger.info(logging_prefix) { 'Attempting to broadcast frame' }
+    logger.info(logging_prefix) { 'Forwarding frame to peer' }
     frame.deliver roommate
   end
 

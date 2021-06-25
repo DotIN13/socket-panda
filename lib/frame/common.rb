@@ -47,7 +47,7 @@ module PandaFrame
 
     def send_frame(dest)
       dest.write prepare
-      logger.info 'Sent frame'
+      logger.info "Sent #{type} frame"
       self.payload = nil
       # Set #busy_from only when socket is not busy
       # or when busy from the same message source
@@ -83,6 +83,10 @@ module PandaFrame
       @opcode == 0x08
     end
 
+    def continuation?
+      @opcode.zero?
+    end
+
     def command_type
       return unless text?
       return @command_type if @command_type
@@ -94,6 +98,7 @@ module PandaFrame
     end
 
     def type
+      return :continuation if continuation?
       return @command_type if command_type
       return :text if text?
       return :binary if binary?

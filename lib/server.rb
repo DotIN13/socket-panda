@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'socket'
-require 'evt'
+require_relative 'scheduler'
 require_relative 'hall'
 require_relative 'guest'
 
@@ -12,7 +12,7 @@ class PandaServer
 
   def initialize
     trap_int
-    Fiber.set_scheduler Evt::Scheduler.new
+    Fiber.set_scheduler SocketPanda::Scheduler.new
     @server = TCPServer.new 5613
     @hall = Hall.new
     start
