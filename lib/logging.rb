@@ -4,44 +4,59 @@ require 'logger'
 require 'English'
 require_relative 'constants'
 
-# Global Logging
-module PandaLogging
-  include PandaConstants
+class SocketPanda
+  class MultiIO
+    def initialize(*targets)
+      @targets = targets
+    end
 
-  def logger
-    PandaLogging.logger
+    def write(*args)
+      @targets.each { |t| t.write(*args) }
+    end
+
+    def close
+      @targets.each(&:close)
+    end
   end
 
-  def logging_prefix
-    return 'New user' unless name && id
-
-    "#{name}/#{id[4..12]}"
-  end
-
-  def production?
-    PandaLogging.production?
-  end
-
-  def log_memory
-    PandaLogging.logger.debug format('%.1fMB used', `ps -o rss= -p #{$PID}`.to_f / 1024)
-  end
-
-  class << self
+  # Global Logging
+  module Logging
     def logger
-      @logger ||= new_logger
+      SocketPanda::Logging.logger
     end
 
-    def new_logger
-      File.delete('panda.log') if File.exist?('panda.log')
-      # logdev = production? ? $stderr : 'panda.log'
-      logdev = $stderr
-      level = production? ? Logger::WARN : Logger::DEBUG
-      @logger = Logger.new logdev, progname: 'Socket Panda', level: level
+    def logging_prefix
+      return 'New user' unless name && id
+
+      "#{name}/#{id[4..12]}"
     end
 
-    # Default to development
     def production?
-      ENV['PANDA_ENV'] == 'production'
+      SocketPanda::Logging.production?
+    end
+
+    def log_memory
+      SocketPanda::Logging.logger.debug format('%.1fMB used', `ps -o rss= -p #{$PID}`.to_f / 1024)
+    end
+
+    class << self
+      def logger
+        @logger ||= new_logger
+      end
+
+      def new_logger
+        logfile = File.open('panda.log', 'w')
+        # File.delete('panda.log') if File.exist?('panda.log')
+        logdev = production? ? $stderr : SocketPanda::MultiIO.new($stderr, logfile)
+        # logdev = $stderr
+        level = production? ? Logger::WARN : Logger::DEBUG
+        @logger = Logger.new logdev, progname: 'Socket Panda', level: level
+      end
+
+      # Default to development
+      def production?
+        ENV['PANDA_ENV'] == 'production'
+      end
     end
   end
 end
