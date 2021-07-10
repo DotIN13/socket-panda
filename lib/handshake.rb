@@ -7,14 +7,12 @@ require_relative 'logging'
 
 class SocketPanda
   class Handshake
-    include PandaLogging
-    include PandaConstants
+    include SocketPanda::Logging
     attr_accessor :request, :http_version, :socket
 
     def initialize(socket)
       self.socket = socket
-      self.request = Struct.new('Headers', :http_method, :http_version, :origin, :upgrade, :connection,
-                                :"sec-websocket-key", :"sec-websocket-version").new
+      self.request = SocketPanda::Headers.new
       read_http_request
       respond
     end
@@ -64,7 +62,8 @@ class SocketPanda
 
     def valid_headers?
       valid = []
-      valid << (ORIGINS.include? request[:origin])
+      # Only test origin in production mode
+      valid << (SocketPanda::ORIGINS.include? request[:origin]) if production?
       valid << (request[:upgrade] == 'websocket')
       valid << (request[:connection] == 'Upgrade')
       valid << (request[:'sec-websocket-version'] == '13')

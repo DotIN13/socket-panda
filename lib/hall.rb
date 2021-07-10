@@ -7,7 +7,7 @@ require_relative 'frame'
 
 # Talkroom
 class Hall
-  include PandaLogging
+  include SocketPanda::Logging
   attr_reader :rooms, :guests
 
   def initialize
@@ -46,7 +46,7 @@ end
 # Serve as components for the hall
 # Can only be occupied by two
 class Room
-  include PandaLogging
+  include SocketPanda::Logging
   attr_accessor :guests, :id
 
   def initialize(id, host = nil)

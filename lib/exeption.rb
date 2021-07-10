@@ -4,7 +4,7 @@ require_relative 'logging'
 
 # Error handling
 class PandaSocketError < StandardError
-  include PandaLogging
+  include SocketPanda::Logging
 
   def initialize(msg)
     logger.error msg.to_s

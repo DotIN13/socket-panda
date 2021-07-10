@@ -8,8 +8,7 @@ require_relative '../constants'
 module PandaFrame
   # General methods
   class Common
-    include PandaLogging
-    include PandaConstants
+    include SocketPanda::Logging
     attr_accessor :payload, :initial_size, :payload_size, :is_masked, :mask, :opcode, :fin
 
     def initialize; end
@@ -19,6 +18,7 @@ module PandaFrame
     def prepare
       data = [(fin << 7) + opcode].pack('C')
       data << prepare_size
+      # logger.debug "payload_size: #{payload_size}, measure_payload: #{payload.bytesize}"
       data << payload
     end
 
@@ -91,7 +91,7 @@ module PandaFrame
       return unless text?
       return @command_type if @command_type
 
-      COMMANDS.each do |cmd|
+      SocketPanda::COMMANDS.each do |cmd|
         @command_type = cmd if payload.start_with? cmd.to_s
       end
       @command_type

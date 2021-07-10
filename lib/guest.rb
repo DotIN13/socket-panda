@@ -9,8 +9,7 @@ require_relative 'constants'
 
 # Extend Ruby TCPSocket class
 class TCPSocket
-  include PandaLogging
-  include PandaConstants
+  include SocketPanda::Logging
   attr_accessor :hall, :room, :handshake, :http_request, :opened, :msg_type, :busy_from
   attr_reader :name, :id
 
@@ -112,7 +111,7 @@ class TCPSocket
   # #handle_frame is called after every received frame
   def handle_frame(frame)
     # Concat payload only if frame is text and starts with commands
-    @data << frame.payload if COMMANDS.include? msg_type
+    @data << frame.payload if SocketPanda::COMMANDS.include? msg_type
     # Directly forward frames nonetheless
     broadcast_frame(frame) unless %i[ROOM PING NAME ping close].include? msg_type
     frame.fin?

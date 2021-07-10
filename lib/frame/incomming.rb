@@ -5,7 +5,6 @@ require_relative '../constants'
 
 module PandaFrame
   class Incomming < Common
-    include PandaConstants
     attr_accessor :socket
 
     def initialize(socket)
@@ -19,6 +18,7 @@ module PandaFrame
       parse_size
       parse_mask
       recv_payload
+      # logger.debug "Incomming payload size: #{payload.bytesize}"
       self
     end
 
@@ -76,9 +76,12 @@ module PandaFrame
 
     def recv_and_unmask
       self.payload = String.new
-      tail = payload_size % FRAGMENT
-      (payload_size / FRAGMENT).times { xor socket.read(FRAGMENT) }
-      xor socket.read(tail)
+      head = payload_size / SocketPanda::FRAGMENT
+      tail = payload_size % SocketPanda::FRAGMENT
+      # logger.debug "Payload head: #{head}, payload tail: #{tail}"
+      head.times { xor socket.read(SocketPanda::FRAGMENT) }
+      # Do xor another time only when there is more data in the pipeline
+      xor socket.read(tail) if tail.positive?
     end
 
     # Record #unmasked state to avoid unmasking multiple times

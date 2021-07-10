@@ -7,7 +7,7 @@ require_relative 'guest'
 
 # WebSocket Server
 class PandaServer
-  include PandaLogging
+  include SocketPanda::Logging
   attr_reader :server, :hall
 
   def initialize
