@@ -45,10 +45,7 @@ class SocketPanda
       end
 
       def new_logger
-        logfile = File.open('panda.log', 'w')
-        # File.delete('panda.log') if File.exist?('panda.log')
-        logdev = production? ? $stderr : SocketPanda::MultiIO.new($stderr, logfile)
-        # logdev = $stderr
+        logdev = production? ? $stderr : SocketPanda::MultiIO.new($stderr, File.open('./panda.log', 'w'))
         level = production? ? Logger::WARN : Logger::DEBUG
         @logger = Logger.new logdev, progname: 'Socket Panda', level: level
       end

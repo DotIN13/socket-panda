@@ -65,12 +65,12 @@ server 'orange.wannaexpresso.com',
          auth_methods: %w[publickey]
        }
 
-server 'romery.wannaexpresso.com',
-       user: 'ruby',
-       port: 1192,
-       roles: %w[websocket],
-       ssh_options: {
-         keys: %w[/Users/dotin13/.ssh/id_rsa],
-         forward_agent: false,
-         auth_methods: %w[publickey]
-       }
+# server 'romery.wannaexpresso.com',
+#        user: 'ruby',
+#        port: 1192,
+#        roles: %w[websocket],
+#        ssh_options: {
+#          keys: %w[/Users/dotin13/.ssh/id_rsa],
+#          forward_agent: false,
+#          auth_methods: %w[publickey]
+#        }
