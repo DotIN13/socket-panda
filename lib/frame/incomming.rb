@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'xorcist'
+
 require_relative 'common'
 require_relative '../constants'
 
@@ -63,7 +65,7 @@ module PandaFrame
       # Do not include mask in bytes
       @mask = socket.read(4)
       # @mask32 = mask.unpack('C*')
-      @mask64 = (mask * 2).unpack1('Q')
+      # @mask64 = (mask * 2)
     end
 
     def recv_payload
@@ -76,21 +78,17 @@ module PandaFrame
 
     def recv_and_unmask
       self.payload = String.new
-      head = payload_size / SocketPanda::FRAGMENT
-      tail = payload_size % SocketPanda::FRAGMENT
-      # logger.debug "Payload head: #{head}, payload tail: #{tail}"
-      head.times { xor socket.read(SocketPanda::FRAGMENT) }
-      # Do xor another time only when there is more data in the pipeline
-      xor socket.read(tail) if tail.positive?
+      xor socket.read(payload_size)
     end
 
     # Record #unmasked state to avoid unmasking multiple times
     def xor(raw)
       size = raw.bytesize
-      padding = 0.chr * (8 - size % 8)
-      raw = (raw + padding).unpack('Q*')
-      raw.each_index { |i| raw[i] ^= @mask64 }
-      payload << raw.pack('Q*')[0..size - 1]
+      padding_size = 4 - size % 4
+      raw << 0.chr * padding_size
+      full_size = size + padding_size # Get the full size of the string, and iterate 8 bytes at a time
+      Xorcist.xor!(raw, mask * (full_size / 4))
+      payload << raw[..size - 1]
     end
 
     # Assuming the first byte comtains the byte length for filename
